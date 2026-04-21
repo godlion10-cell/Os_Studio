@@ -213,19 +213,30 @@ def generate_full():
     """
 
     content = None
+    # [503 방어] 폴백 체인
     for model_name in MODELS:
         try:
+            print(f"🔄 {model_name} 엔진 가동 시작...")
             model = genai.GenerativeModel(model_name)
-            res = model.generate_content(prompt)
-            content = json.loads(re.search(r'\{.*\}', res.text, re.DOTALL).group())
             
+            # 🛡️ [핵심 패치] 정규식(re.search) 삭제 & JSON 강제 모드 발동
+            res = model.generate_content(
+                prompt,
+                generation_config={"response_mime_type": "application/json"}
+            )
+            
+            content = json.loads(res.text)
+            
+            # [방어] 원고 길이 검증 및 늘리기
             if len(content.get('html', '')) < 600:
                 print("⚠️ 원고가 짧아 FAQ 추가 중...")
                 expand_res = model.generate_content(f"다음 HTML 끝에 '{keyword}' 관련 FAQ 3개를 추가해줘.\n{content.get('html', '')}")
                 content['html'] = expand_res.text
-            break
+                
+            break # 성공 시 탈출
         except Exception as e:
-            print(f"🚨 {model_name} 실패: {e}")
+            # 터미널에 정확한 에러 원인을 출력합니다.
+            print(f"🚨 {model_name} 실패 상세 원인: {e}")
             continue
 
     if not content:
