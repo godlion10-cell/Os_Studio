@@ -6,7 +6,7 @@ TEST_API_KEY = "AIzaSyB71ZRmGp2RQUm_d_uESoMOkPLLIuq6PZ8"
 
 print("🤖 제미나이 엔진 단독 테스트를 시작합니다...")
 genai.configure(api_key=TEST_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
 try:
     response = model.generate_content("테스트입니다. '준비 완료'라고 딱 네 글자만 대답해줘.")
