@@ -177,7 +177,7 @@ def get_trends():
         )
         return jsonify(json.loads(res.text))
     except Exception as e:
-        print(f"🚨 트렌드 에러: {e}")
+        print(f"[ERROR] 트렌드 에러: {e}")
         return jsonify({"search_trends": ["트렌드 1", "트렌드 2"], "home_trends": ["홈 1", "홈 2"]})
 
 @app.route('/go')
@@ -215,7 +215,7 @@ def generate_full():
             content = json.loads(res.text)
             break
         except Exception as e:
-            print(f"🚨 {model_name} 엔진 실패: {e}")
+            print(f"[ERROR] {model_name} 엔진 실패: {e}")
             continue
 
     if not content:
@@ -264,7 +264,7 @@ def generate_full():
             "cloaked_cpa_link": cloaked_link
         })
     except Exception as e:
-        print(f"🚨 조립 중 에러: {traceback.format_exc()}")
+        print(f"[ERROR] 조립 중 에러: {traceback.format_exc()}")
         return jsonify({"status": "error", "message": "데이터 조립 실패. 터미널 로그를 확인하세요."}), 500
 
 if __name__ == '__main__':
