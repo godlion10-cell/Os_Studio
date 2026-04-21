@@ -3,9 +3,9 @@ import google.generativeai as genai
 import os
 from dotenv import load_dotenv
 
-# 1. 환경 변수 및 설정 로드
-load_dotenv()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# 1. 환경 변수 무시하고 직접 키 꽂아넣기
+# load_dotenv() # <--- 이 줄은 지우거나 앞에 #을 붙여주세요.
+GEMINI_API_KEY = "AIzaSyACB4--EZm5cXBF6bI56z7GFDLfR3ecvhY"
 
 # 2. 최신 제미나이 2.5 엔진 세팅
 # 사장님 계정에서 확인된 최신 모델명을 정확히 타격합니다.
