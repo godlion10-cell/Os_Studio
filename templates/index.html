@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>🚀 오스(Os) 컨트롤 타워 v2.0</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 1fr 2fr; gap: 20px; }
+        .panel { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        h2 { margin-top: 0; color: #2c3e50; font-size: 18px; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .btn { background-color: #03c75a; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
+        .btn:hover { background-color: #02b350; }
+        .btn-copy { background-color: #2980b9; font-size: 16px; padding: 15px; }
+        .btn-copy:hover { background-color: #2471a3; }
+        input[type="text"] { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; margin-bottom: 10px; }
+        .radio-group { margin-bottom: 15px; }
+        .trend-item { padding: 10px; background: #f8f9fa; margin-bottom: 8px; border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .trend-item:hover { background: #e9ecef; }
+        #result-box { border: 1px dashed #ccc; padding: 20px; min-height: 300px; margin-bottom: 15px; background: #fff; }
+    </style>
+</head>
+<body>
+    <h1 style="text-align: center; color: #2c3e50;">🚀 오스(Os) 콘텐츠 제국 컨트롤 타워</h1>
+    <div class="container">
+        <div class="panel">
+            <h2>🔥 실시간 트렌드 레이더</h2>
+            <div id="trends-container"><p style="color: #888;">로딩 중...</p></div>
+            <button class="btn" style="background-color: #6c757d;" onclick="loadTrends()">🔄 새로고침</button>
+        </div>
+        <div class="panel">
+            <h2>🎯 원고 공장 가동</h2>
+            <input type="text" id="keyword-input" placeholder="키워드를 입력하세요 (예: 위르겐 클린스만)">
+            <div class="radio-group">
+                <label><input type="radio" name="post_type" value="search" checked> 🔍 검색 노출용</label>
+                <label style="margin-left: 15px;"><input type="radio" name="post_type" value="home"> 🏠 홈판 이슈용</label>
+            </div>
+            <button class="btn" onclick="generatePost()">✨ 맞춤형 원고 생성</button>
+            
+            <h2 style="margin-top: 30px;">🎨 네이버 클론 에디터</h2>
+            <div id="result-box">
+                <p style="text-align: center; color: #888; margin-top: 100px;">생성된 원고가 이곳에 표시됩니다.</p>
+            </div>
+            <button class="btn btn-copy" onclick="copyRichText()">📋 네이버 서식 그대로 복사하기</button>
+        </div>
+    </div>
+
+    <script>
+        window.onload = loadTrends;
+        async function loadTrends() {
+            const res = await fetch('/api/trends');
+            const data = await res.json();
+            const container = document.getElementById('trends-container');
+            container.innerHTML = '';
+            data.trends.forEach((kw, i) => {
+                container.innerHTML += `<div class="trend-item" onclick="document.getElementById('keyword-input').value='${kw}'"><span><strong>${i+1}.</strong> ${kw}</span><span style="font-size:12px; color:#03c75a;">선택 👆</span></div>`;
+            });
+        }
+        async function generatePost() {
+            const kw = document.getElementById('keyword-input').value;
+            const type = document.querySelector('input[name="post_type"]:checked').value;
+            if(!kw) return alert('키워드를 입력해주세요!');
+            document.getElementById('result-box').innerHTML = '<p style="text-align:center;">⏳ AI가 원고를 작성 중입니다...</p>';
+            const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ keyword: kw, type: type }) });
+            const data = await res.json();
+            document.getElementById('result-box').innerHTML = data.html;
+        }
+        async function copyRichText() {
+            const box = document.getElementById('result-box');
+            if (box.innerText.includes('생성된 원고가 이곳에 표시됩니다')) return alert('먼저 원고를 생성해주세요!');
+            try {
+                const html = box.innerHTML;
+                const blob = new Blob([html], { type: 'text/html' });
+                const item = new ClipboardItem({ 'text/html': blob });
+                await navigator.clipboard.write([item]);
+                alert('✅ 복사 성공! 네이버 블로그에 가서 Ctrl+V 를 누르세요.');
+            } catch (err) { alert('복사 실패. 브라우저 설정을 확인해주세요.'); }
+        }
+    </script>
+</body>
+</html>
