@@ -157,10 +157,15 @@ def index(): return render_template_string(HTML_TEMPLATE)
 def get_trends():
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
-        res = model.generate_content("대한민국 핫트렌드 20개를 검색용 10개, 홈판용 10개로 나누어 JSON {search_trends:[], home_trends:[]} 으로 반환.")
-        return jsonify(json.loads(re.search(r'\{.*\}', res.text, re.DOTALL).group()))
-    except:
-        return jsonify({"search_trends": ["점검중"], "home_trends": ["점검중"]})
+        # generation_config를 써서 무조건 JSON 형식으로만 대답하게 강제 고정!
+        res = model.generate_content(
+            "대한민국 핫트렌드 20개를 검색용 10개, 홈판용 10개로 나누어 반환해. 필수 키: search_trends, home_trends",
+            generation_config=genai.GenerationConfig(response_mime_type="application/json")
+        )
+        return jsonify(json.loads(res.text))
+    except Exception as e:
+        print(f"🚨 트렌드 에러: {e}")
+        return jsonify({"search_trends": ["새로고침 해주세요"], "home_trends": ["새로고침 해주세요"]})
 
 # ⚔️ [공격 2] CPA 링크 클로킹 라우터 (저품질 회피)
 @app.route('/go')
@@ -246,13 +251,16 @@ def generate_full():
         
         try:
             img_r = requests.get(url, timeout=20)
-            if img_r.status_code == 200 and len(img_r.content) > 1024:
+            # 🛡️ [핵심 방어] 응답 데이터가 '진짜 이미지'일 때만 저장!
+            if img_r.status_code == 200 and 'image' in img_r.headers.get('Content-Type', ''):
                 with open(save_path, 'wb') as f:
                     f.write(img_r.content)
                 generated_images.append(f"/static/images/{filename}")
-            else: raise Exception("Invalid Image")
+            else: 
+                raise Exception("이미지 서버가 그림 대신 텍스트/에러를 반환했습니다.")
         except Exception as e:
-            # 실패 시 엑스박스 대신 '광고 배너'로 빈칸 채우기 (스마트 폴백)
+            print(f"🚨 이미지 생성 실패, 대체 배너 삽입: {e}")
+            # 실패 시 엑스박스 대신 쿠팡 배너 삽입 (스마트 폴백)
             placeholder = f'<a href="/go?target=https://coupa.ng/YOUR_LINK" style="display:block; background:#fff3e0; padding:30px; text-align:center; border:2px dashed #ffb74d; border-radius:10px; color:#e65100; text-decoration:none; margin:30px 0;">🎁 <strong>{keyword}</strong> 관련 시크릿 특가 확인하기 (클릭)</a>'
             generated_images.append(placeholder)
 
