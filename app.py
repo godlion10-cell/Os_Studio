@@ -12,7 +12,7 @@ if not GEMINI_API_KEY:
     print("🚨 경고: .env 파일에 GEMINI_API_KEY가 설정되지 않았습니다!")
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash') # 빠르고 똑똑한 최신 모델
+model = genai.GenerativeModel('gemini-1.5-flash-latest') # 빠르고 똑똑한 최신 모델
 
 app = Flask(__name__)
 
