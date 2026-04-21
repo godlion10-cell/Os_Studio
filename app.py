@@ -30,7 +30,7 @@ HTML_TEMPLATE = """
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>Os Studio v5.1 MASTER - Naver/Google Profit Machine</title>
+    <title>Os Studio v5.2 - Error Free Engine</title>
     <style>
         body { margin: 0; display: flex; font-family: 'Nanum Gothic', sans-serif; background: #f0f2f5; height: 100vh; overflow: hidden; }
         #sidebar { width: 280px; background: #fff; border-right: 1px solid #ddd; padding: 20px; overflow-y: auto; flex-shrink: 0; }
@@ -67,8 +67,7 @@ HTML_TEMPLATE = """
 
     <div id="sidebar">
         <h2 style="color: #2db400;">Os Radar 📡</h2>
-        <div id="search-trends">트렌드 로딩 중...</div>
-        <hr>
+        <div id="search-trends">트렌드 로딩 중...</div><hr>
         <div id="home-trends"></div>
     </div>
 
@@ -98,14 +97,14 @@ HTML_TEMPLATE = """
                     <div class="card-title">📱 쇼츠/릴스 대본</div>
                     <pre id="shorts-display"></pre>
                 </div>
+                <div class="info-card" style="background: #f3e5f5;">
+                    <div class="card-title">🔥 알고리즘 팩 (해시태그 & 캡션)</div>
+                    <div id="seo-tags" style="font-weight:bold; color:#8e24aa;"></div>
+                    <pre id="insta-caption" style="margin-top:10px;"></pre>
+                </div>
                 <div class="info-card">
                     <div class="card-title">🎥 CF급 영상 프롬프트</div>
                     <div id="image-prompts-display" style="font-size: 11px;"></div>
-                </div>
-                <div class="info-card" style="background: #f3e5f5;">
-                    <div class="card-title">🔥 알고리즘 팩</div>
-                    <div id="seo-tags" style="font-weight:bold; color:#8e24aa;"></div>
-                    <pre id="insta-caption" style="margin-top:10px;"></pre>
                 </div>
             </div>
         </div>
@@ -118,7 +117,7 @@ HTML_TEMPLATE = """
                 const data = await res.json();
                 document.getElementById('search-trends').innerHTML = '<h4>🔍 검색용</h4>' + data.search_trends.map(t => `<div class="trend-item" onclick="setKeyword('${t}')">${t}</div>`).join('');
                 document.getElementById('home-trends').innerHTML = '<h4>🏠 홈판용</h4>' + data.home_trends.map(t => `<div class="trend-item" onclick="setKeyword('${t}')">${t}</div>`).join('');
-            } catch(e) { document.getElementById('search-trends').innerText = "로딩 실패 (F5를 눌러주세요)"; }
+            } catch(e) { document.getElementById('search-trends').innerText = "로딩 에러 (새로고침 요망)"; }
         }
         function setKeyword(k) { document.getElementById('target-keyword').value = k; }
 
@@ -147,15 +146,18 @@ HTML_TEMPLATE = """
                             <h3>🚨 [마감임박] ${data.cpa_banner}</h3>
                         </a>`;
 
-                    document.getElementById('stats-info').innerHTML = `✅ 예상 조회수: <strong>${data.stats.views.toLocaleString()}회</strong><br>💰 예상 수익: <strong>${data.stats.revenue.toLocaleString()}원</strong>`;
-                    document.getElementById('shorts-display').innerText = data.shorts_script;
-                    document.getElementById('seo-tags').innerText = data.seo_tags.join(' ');
-                    document.getElementById('insta-caption').innerText = data.insta_caption;
-                    document.getElementById('image-prompts-display').innerHTML = data.img_prompts.map(p => `<p>🎬 ${p}</p>`).join('');
+                    const views = data.stats && data.stats.views ? data.stats.views.toLocaleString() : 0;
+                    const rev = data.stats && data.stats.revenue ? data.stats.revenue.toLocaleString() : 0;
+                    
+                    document.getElementById('stats-info').innerHTML = `✅ 예상 조회수: <strong>${views}회</strong><br>💰 예상 수익: <strong>${rev}원</strong>`;
+                    document.getElementById('shorts-display').innerText = data.shorts_script || '대본 생성 실패';
+                    document.getElementById('seo-tags').innerText = (data.seo_tags || []).join(' ');
+                    document.getElementById('insta-caption').innerText = data.insta_caption || '';
+                    document.getElementById('image-prompts-display').innerHTML = (data.img_prompts || []).map(p => `<p>🎬 ${p}</p>`).join('');
 
                     document.querySelectorAll('#editor-body img').forEach(img => img.src = img.src + "?v=" + Date.now());
                 } else { alert("에러: " + data.message); }
-            } catch(e) { alert("서버 통신 실패"); }
+            } catch(e) { alert("서버 통신 실패: 파이썬 서버가 실행 중인지 확인하세요."); }
             finally { document.getElementById('loading-overlay').style.display = 'none'; }
         }
         window.onload = loadTrends;
@@ -165,29 +167,26 @@ HTML_TEMPLATE = """
 """
 
 # ----------------------------------------------------------------
-# [BACK-END] 핵심 로직 (에러 방어막 및 수익화 이식)
+# [BACK-END] API 라우터 (강철 방어막 적용)
 # ----------------------------------------------------------------
 
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
 
-# ⚔️ [픽스 1] 트렌드 JSON 강제화 (점검중 해결)
 @app.route('/api/trends')
 def get_trends():
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
-        # JSON 모드 강제 설정
         res = model.generate_content(
-            "대한민국 핫트렌드 20개를 검색용 10개, 홈판용 10개로 나누어 JSON으로만 답해. {search_trends:[], home_trends:[]}",
+            "대한민국 핫트렌드 20개를 검색용 10개, 홈판용 10개로 나누어 반환해. 필수 JSON 키: search_trends, home_trends",
             generation_config={"response_mime_type": "application/json"}
         )
         return jsonify(json.loads(res.text))
     except Exception as e:
         print(f"🚨 트렌드 에러: {e}")
-        return jsonify({"search_trends": ["새로고침 요망"], "home_trends": ["점검중"]})
+        return jsonify({"search_trends": ["트렌드 1", "트렌드 2"], "home_trends": ["홈 1", "홈 2"]})
 
-# ⚔️ [픽스 2] CPA 클로킹 링크 (저품질 회피)
 @app.route('/go')
 def redirect_cpa():
     target = request.args.get('target', 'https://www.coupang.com')
@@ -196,7 +195,7 @@ def redirect_cpa():
 @app.route('/api/generate-full', methods=['POST'])
 def generate_full():
     data = request.get_json()
-    keyword = data.get('keyword')
+    keyword = data.get('keyword', '테스트')
     mode = data.get('mode', 'naver')
 
     prompt = f"""
