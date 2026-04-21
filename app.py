@@ -12,7 +12,6 @@ from dotenv import load_dotenv
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-# 서버 과부하 방어용 모델 체인
 MODELS = ['gemini-1.5-pro', 'gemini-1.5-flash'] 
 
 app = Flask(__name__)
@@ -23,7 +22,7 @@ IMAGE_FOLDER = os.path.join(BASE_DIR, 'static', 'images')
 os.makedirs(IMAGE_FOLDER, exist_ok=True)
 
 # ----------------------------------------------------------------
-# [FRONT-END] UI: v5.1 통합 대시보드
+# [FRONT-END] UI 대시보드
 # ----------------------------------------------------------------
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -36,26 +35,20 @@ HTML_TEMPLATE = """
         #sidebar { width: 280px; background: #fff; border-right: 1px solid #ddd; padding: 20px; overflow-y: auto; flex-shrink: 0; }
         .trend-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; font-size: 14px; transition: 0.2s; }
         .trend-item:hover { background: #f1f8e9; color: #2db400; font-weight:bold; }
-        
         #main-container { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
         #toolbar { background: #fff; padding: 15px; border-bottom: 1px solid #ddd; display: flex; justify-content: center; gap: 15px; align-items: center; }
-        
         #content-area { display: flex; flex: 1; overflow-y: auto; padding: 20px; gap: 20px; justify-content: center; }
         #editor-canvas { width: 700px; background: #fff; padding: 50px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); min-height: 1200px; }
-        
         #title-display { font-size: 26px; font-weight: bold; text-align: center; margin-bottom: 30px; border-bottom: 2px solid #eee; padding-bottom: 15px; }
         #editor-body { font-size: 17px; line-height: 2.2; text-align: center; outline: none; color: #333; }
         img { max-width: 100%; border-radius: 12px; margin: 30px 0; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
-        
         .cliffhanger { background:#111; color:#fff; padding:20px; border-radius:10px; margin-top:40px; text-align:center; font-weight:bold; }
         .cpa-banner { background: linear-gradient(135deg, #ff416c, #ff4b2b); color: white; padding: 20px; border-radius: 10px; text-align: center; margin-top: 20px; cursor: pointer; animation: pulse 2s infinite; text-decoration: none; display: block; }
         @keyframes pulse { 0% {box-shadow: 0 0 0 0 rgba(255, 65, 108, 0.7);} 70% {box-shadow: 0 0 0 15px rgba(255, 65, 108, 0);} 100% {box-shadow: 0 0 0 0 rgba(255, 65, 108, 0);} }
-        
         #right-panel { width: 380px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
         .info-card { background: #fff; padding: 20px; border-radius: 12px; border: 1px solid #ddd; font-size: 14px; }
         .card-title { font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; color: #333; }
         pre { white-space: pre-wrap; background: #f9f9f9; padding: 10px; border-radius: 5px; font-size: 12px; line-height: 1.6; }
-        
         #loading-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1000; color: #fff; flex-direction: column; justify-content: center; align-items: center; }
     </style>
 </head>
@@ -202,58 +195,42 @@ def generate_full():
     당신은 A급 마케터이자 CF 영상 감독입니다.
     주제: '{keyword}'
     [작성 규칙]
-    1. html: {'네이버 감성, 가운데 정렬' if mode=='naver' else '구글 SEO, 좌측 정렬'}. 본문 중간에 '환급', '대출', '지원금' 등 고단가 키워드로 문맥을 자연스럽게 전환할 것. [IMG_1], [IMG_2] 포함.
+    1. html: {'네이버 감성, 가운데 정렬' if mode=='naver' else '구글 SEO, 좌측 정렬'}. 본문 중간에 '환급', '대출', '지원금' 등 고단가 키워드로 문맥을 전환. [IMG_1], [IMG_2] 포함.
     2. shorts_script: 60초 분량, 시각/청각 지시문 포함.
     3. cliffhanger & cpa_banner: 독자를 미치게 만드는 카피라이팅 적용.
-    4. stats: 조회수와 고단가 수익 예측.
-    5. img_prompts: 영어로 작성된 CF 수준의 세로형(9:16) 실사 프롬프트 2개.
+    4. stats: 조회수(views)와 고단가 수익(revenue) 예측.
+    5. img_prompts: 영어로 작성된 CF 수준의 세로형 실사 프롬프트 2개.
     6. seo_tags & insta_caption: 인스타 DM 유도 멘트 포함.
-    반드시 JSON으로 응답: {{"title":"", "html":"", "shorts_script":"", "cliffhanger":"", "cpa_banner":"", "stats":{{"views":0, "revenue":0}}, "seo_tags":[], "insta_caption":"", "img_prompts":[]}}
+    반드시 JSON 형식 필수 키: title, html, shorts_script, cliffhanger, cpa_banner, stats, seo_tags, insta_caption, img_prompts
     """
 
     content = None
-    # [503 방어] 폴백 체인
     for model_name in MODELS:
         try:
-            print(f"🔄 {model_name} 엔진 가동 시작...")
             model = genai.GenerativeModel(model_name)
-            
-            # 🛡️ [핵심 패치] 정규식(re.search) 삭제 & JSON 강제 모드 발동
             res = model.generate_content(
                 prompt,
                 generation_config={"response_mime_type": "application/json"}
             )
-            
             content = json.loads(res.text)
-            
-            # [방어] 원고 길이 검증 및 늘리기
-            if len(content.get('html', '')) < 600:
-                print("⚠️ 원고가 짧아 FAQ 추가 중...")
-                expand_res = model.generate_content(f"다음 HTML 끝에 '{keyword}' 관련 FAQ 3개를 추가해줘.\n{content.get('html', '')}")
-                content['html'] = expand_res.text
-                
-            break # 성공 시 탈출
+            break
         except Exception as e:
-            # 터미널에 정확한 에러 원인을 출력합니다.
-            print(f"🚨 {model_name} 실패 상세 원인: {e}")
+            print(f"🚨 {model_name} 엔진 실패: {e}")
             continue
 
     if not content:
-        # 서버에서 명확하게 JSON 에러를 내려줌
-        return jsonify({"status": "error", "message": "구글 서버 과부하. 10초 뒤에 다시 눌러주세요!"}), 500
+        return jsonify({"status": "error", "message": "구글 AI 응답 에러. 다시 시도해주세요."}), 500
 
     try:
-        # 🛡️ 융통성 패치 적용: 데이터가 누락되어도 .get()으로 에러 원천 차단
         final_html = content.get('html', '<p>본문 생성 실패</p>')
 
         if mode == 'naver':
-            ghost_dict = {"요약하자면": "솔직히 정리해보면", "결론적으로": "아무튼 팩트는", "중요합니다": "진짜 중요해요!"}
-            for k, v in ghost_dict.items():
+            for k, v in {"요약하자면": "솔직히 정리해보면", "결론적으로": "아무튼 팩트는", "중요합니다": "진짜 중요해요!"}.items():
                 final_html = final_html.replace(k, v)
 
         generated_images = []
         for i, img_p in enumerate(content.get('img_prompts', [])):
-            filename = f"os_v51_{int(time.time())}_{i}.jpg"
+            filename = f"os_v52_{int(time.time())}_{i}.jpg"
             save_path = os.path.join(IMAGE_FOLDER, filename)
             url = f"https://pollinations.ai/p/{requests.utils.quote(img_p)}?width=768&height=1024&model=flux&nologo=true"
             
@@ -263,10 +240,9 @@ def generate_full():
                     with open(save_path, 'wb') as f:
                         f.write(img_r.content)
                     generated_images.append(f"/static/images/{filename}")
-                else: raise Exception("Invalid Content")
+                else: raise Exception("Not an image")
             except:
-                placeholder = f'<div style="background:#fff3e0; padding:30px; border:2px dashed #ffb74d; border-radius:10px; color:#e65100; margin:30px 0;">🎁 [한정특가] {keyword} 관련 시크릿 혜택 확인하기</div>'
-                generated_images.append(placeholder)
+                generated_images.append(f'<div style="background:#fff3e0; padding:30px; border:2px dashed #ffb74d; border-radius:10px; color:#e65100; margin:30px 0; text-align:center;">🎁 [한정특가] {keyword} 관련 시크릿 혜택 확인하기</div>')
 
         for i, img_data in enumerate(generated_images):
             tag = f'<img src="{img_data}">' if img_data.startswith('/static') else img_data
@@ -274,24 +250,22 @@ def generate_full():
 
         cloaked_link = f"/go?target=https://link.coupang.com/a/YOUR_ID"
 
-        # 🛡️ 안전하게 JSON 반환 (KeyError 완전 박멸)
         return jsonify({
             "status": "success",
-            "title": content.get('title', '제목을 불러오지 못했습니다'),
+            "title": content.get('title', '제목 없음'),
             "html": final_html,
-            "cliffhanger": content.get('cliffhanger', '비공개 정보는 다음 글에서...'),
-            "cpa_banner": content.get('cpa_banner', '클릭해서 혜택을 확인하세요!'),
-            "shorts_script": content.get('shorts_script', '쇼츠 대본 생성 중 오류 발생'),
+            "cliffhanger": content.get('cliffhanger', '다음 글에서 뵙겠습니다.'),
+            "cpa_banner": content.get('cpa_banner', '클릭해서 확인하세요!'),
+            "shorts_script": content.get('shorts_script', '대본 생성 실패'),
             "stats": content.get('stats', {"views": 0, "revenue": 0}),
-            "seo_tags": content.get('seo_tags', ['#트렌드', '#추천']),
-            "insta_caption": content.get('insta_caption', '프로필 링크를 확인해주세요!'),
+            "seo_tags": content.get('seo_tags', []),
+            "insta_caption": content.get('insta_caption', ''),
             "img_prompts": content.get('img_prompts', []),
             "cloaked_cpa_link": cloaked_link
         })
-    
     except Exception as e:
-        print(f"🚨 파이썬 내부 조립 에러: {traceback.format_exc()}")
-        return jsonify({"status": "error", "message": "데이터 조립 중 서버 에러가 발생했습니다."}), 500
+        print(f"🚨 조립 중 에러: {traceback.format_exc()}")
+        return jsonify({"status": "error", "message": "데이터 조립 실패. 터미널 로그를 확인하세요."}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
