@@ -30,3 +30,9 @@ Thumbs.db
 # Flask
 instance/
 *.sqlite3
+
+# AI 생성 이미지 (용량 관리 - 깃허브에 올리지 않음)
+static/images/*.jpg
+static/images/*.png
+static/images/*.webp
+!static/images/.gitkeep
