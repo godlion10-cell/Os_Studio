@@ -3,7 +3,8 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
-genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
+TEST_API_KEY = "AIzaSyBl59YK1uo07uv1HUwsyJZbZFPSigZPmwM"
+genai.configure(api_key=TEST_API_KEY)
 
 print("🔍 이 API 키로 사용 가능한 모델 목록:")
 try:

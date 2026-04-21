@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>🚀 오스(Os) 컨트롤 타워 v2.0</title>
+    <title>🚀 오스(Os) 컨트롤 타워 v3.0</title>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; }
         .container { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 1fr 2fr; gap: 20px; }
@@ -13,60 +13,106 @@
         .btn-copy { background-color: #2980b9; font-size: 16px; padding: 15px; }
         .btn-copy:hover { background-color: #2471a3; }
         input[type="text"] { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; margin-bottom: 10px; }
-        .radio-group { margin-bottom: 15px; }
-        .trend-item { padding: 10px; background: #f8f9fa; margin-bottom: 8px; border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .trend-category { margin-top: 15px; font-weight: bold; color: #e74c3c; font-size: 14px; }
+        .trend-item { padding: 8px; background: #f8f9fa; margin-bottom: 5px; border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 13px;}
         .trend-item:hover { background: #e9ecef; }
         #result-box { border: 1px dashed #ccc; padding: 20px; min-height: 300px; margin-bottom: 15px; background: #fff; }
     </style>
 </head>
 <body>
-    <h1 style="text-align: center; color: #2c3e50;">🚀 오스(Os) 콘텐츠 제국 컨트롤 타워</h1>
+    <h1 style="text-align: center; color: #2c3e50;">🚀 오스(Os) 통합 콘텐츠 공장 v3.0</h1>
     <div class="container">
         <div class="panel">
-            <h2>🔥 실시간 트렌드 레이더</h2>
+            <h2>🔥 AI 실시간 트렌드 레이더</h2>
             <div id="trends-container"><p style="color: #888;">로딩 중...</p></div>
-            <button class="btn" style="background-color: #6c757d;" onclick="loadTrends()">🔄 새로고침</button>
+            <button class="btn" style="background-color: #6c757d;" onclick="loadTrends()">🔄 트렌드 새로고침</button>
         </div>
+        
         <div class="panel">
-            <h2>🎯 원고 공장 가동</h2>
-            <input type="text" id="keyword-input" placeholder="키워드를 입력하세요 (예: 위르겐 클린스만)">
-            <div class="radio-group">
-                <label><input type="radio" name="post_type" value="search" checked> 🔍 검색 노출용</label>
-                <label style="margin-left: 15px;"><input type="radio" name="post_type" value="home"> 🏠 홈판 이슈용</label>
-            </div>
-            <button class="btn" onclick="generatePost()">✨ 맞춤형 원고 생성</button>
+            <h2>🎯 통합 원고 & 썸네일 자동화</h2>
+            <input type="text" id="keyword-input" placeholder="키워드를 입력하세요 (예: 봄철 피부 관리법)">
+            <button class="btn" style="background-color: #8e44ad; font-size: 16px; padding: 15px;" onclick="generateAll()">✨ 블로그 원고 + 고화질 썸네일 동시 생성</button>
             
             <h2 style="margin-top: 30px;">🎨 네이버 클론 에디터</h2>
             <div id="result-box">
-                <p style="text-align: center; color: #888; margin-top: 100px;">생성된 원고가 이곳에 표시됩니다.</p>
+                <p style="text-align: center; color: #888; margin-top: 100px;">생성된 블로그 원고가 이곳에 표시됩니다.</p>
             </div>
             <button class="btn btn-copy" onclick="copyRichText()">📋 네이버 서식 그대로 복사하기</button>
+        </div>
+        
+        <div class="panel" style="grid-column: 1 / -1;">
+            <h2>🎥 추출된 썸네일 실사 이미지 갤러리</h2>
+            <div id="storyboard-box" style="border: 1px dashed #ccc; padding: 20px; min-height: 250px; background: #fff; border-radius: 8px;">
+                <p style="text-align: center; color: #888; margin-top: 100px;">원고 내용에 찰떡같이 맞는 고화질 실사 이미지가 이곳에 렌더링됩니다.</p>
+            </div>
         </div>
     </div>
 
     <script>
         window.onload = loadTrends;
+        
         async function loadTrends() {
-            const res = await fetch('/api/trends');
-            const data = await res.json();
             const container = document.getElementById('trends-container');
-            container.innerHTML = '';
-            data.trends.forEach((kw, i) => {
-                container.innerHTML += `<div class="trend-item" onclick="document.getElementById('keyword-input').value='${kw}'"><span><strong>${i+1}.</strong> ${kw}</span><span style="font-size:12px; color:#03c75a;">선택 👆</span></div>`;
-            });
+            container.innerHTML = '<p style="color: #888;">⏳ 제미나이가 실시간 트렌드를 분석 중입니다...</p>';
+            try {
+                const res = await fetch('/api/trends');
+                const data = await res.json();
+                
+                let html = '<div class="trend-category">🔍 검색 노출 추천 (Search)</div>';
+                data.search_trends.forEach((kw, i) => {
+                    html += `<div class="trend-item" onclick="document.getElementById('keyword-input').value='${kw}'"><span><strong>${i+1}.</strong> ${kw}</span><span style="font-size:11px; color:#03c75a;">선택 👆</span></div>`;
+                });
+                
+                html += '<div class="trend-category" style="color: #3498db; margin-top: 20px;">🏠 홈판 이슈 추천 (Home)</div>';
+                data.home_trends.forEach((kw, i) => {
+                    html += `<div class="trend-item" onclick="document.getElementById('keyword-input').value='${kw}'"><span><strong>${i+1}.</strong> ${kw}</span><span style="font-size:11px; color:#03c75a;">선택 👆</span></div>`;
+                });
+                
+                container.innerHTML = html;
+            } catch (e) {
+                container.innerHTML = '<p style="color:red;">트렌드 로딩 실패</p>';
+            }
         }
-        async function generatePost() {
+
+        async function generateAll() {
             const kw = document.getElementById('keyword-input').value;
-            const type = document.querySelector('input[name="post_type"]:checked').value;
             if(!kw) return alert('키워드를 입력해주세요!');
-            document.getElementById('result-box').innerHTML = '<p style="text-align:center;">⏳ AI가 원고를 작성 중입니다...</p>';
-            const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ keyword: kw, type: type }) });
-            const data = await res.json();
-            document.getElementById('result-box').innerHTML = data.html;
+            
+            const blogBox = document.getElementById('result-box');
+            const imgBox = document.getElementById('storyboard-box');
+            
+            blogBox.innerHTML = '<p style="text-align:center; font-size:16px; margin-top:100px;">⏳ <strong>AI 수석 작가 + Imagen 3 실사 엔진</strong>이 원고와 이미지를 동시 제작 중입니다...<br><small style="color:#888;">(약 20~40초 소요)</small></p>';
+            imgBox.innerHTML = '<p style="text-align:center; color:#888; margin-top:60px;">원고 생성 완료 후 이미지가 여기에 표시됩니다.</p>';
+            
+            try {
+                const res = await fetch('/api/generate-full', { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ keyword: kw }) 
+                });
+                const response = await res.json();
+                
+                if (response.status === 'success') {
+                    // 블로그 원고 렌더링
+                    blogBox.innerHTML = response.html;
+                    
+                    // 이미지 갤러리 렌더링 (원고 내 이미지가 이미 삽입되어 있으므로 갤러리는 제목만 표시)
+                    imgBox.innerHTML = `<div style="padding: 20px; text-align: center; background: #f8f9fa; border-radius: 8px;">
+                        <h3 style="color: #2c3e50;">✅ "${response.title}" 원고 생성 완료!</h3>
+                        <p style="color: #7f8c8d;">Imagen 3가 생성한 실사 이미지가 원고 본문 안에 삽입되었습니다.<br>위쪽 에디터에서 확인하시고 📋 복사 버튼을 눌러 네이버에 붙여넣기 하세요!</p>
+                    </div>`;
+                } else {
+                    blogBox.innerHTML = `<div style="color:red; text-align:center; margin-top:100px; padding:20px;">🚨 에러: ${response.message}</div>`;
+                    imgBox.innerHTML = '';
+                }
+            } catch (err) {
+                blogBox.innerHTML = `<p style="color:red; text-align:center; margin-top:100px;">통신 에러 발생: ${err.message}</p>`;
+            }
         }
+
         async function copyRichText() {
             const box = document.getElementById('result-box');
-            if (box.innerText.includes('생성된 원고가 이곳에 표시됩니다')) return alert('먼저 원고를 생성해주세요!');
+            if (box.innerText.includes('생성된 블로그 원고가 이곳에 표시됩니다')) return alert('먼저 원고를 생성해주세요!');
             try {
                 const html = box.innerHTML;
                 const blob = new Blob([html], { type: 'text/html' });
