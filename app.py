@@ -213,17 +213,15 @@ def generate_full():
     """
 
     content = None
-    # [503 방어] 폴백 체인
     for model_name in MODELS:
         try:
             model = genai.GenerativeModel(model_name)
             res = model.generate_content(prompt)
             content = json.loads(re.search(r'\{.*\}', res.text, re.DOTALL).group())
             
-            # [방어] 원고 길이 검증 및 늘리기 (Auto-Expand)
-            if len(content['html']) < 600:
+            if len(content.get('html', '')) < 600:
                 print("⚠️ 원고가 짧아 FAQ 추가 중...")
-                expand_res = model.generate_content(f"다음 HTML 끝에 '{keyword}' 관련 FAQ 3개를 추가해줘.\n{content['html']}")
+                expand_res = model.generate_content(f"다음 HTML 끝에 '{keyword}' 관련 FAQ 3개를 추가해줘.\n{content.get('html', '')}")
                 content['html'] = expand_res.text
             break
         except Exception as e:
@@ -231,55 +229,59 @@ def generate_full():
             continue
 
     if not content:
-        return jsonify({"status": "error", "message": "구글 서버 과부하. 잠시 후 재시도!"}), 500
+        # 서버에서 명확하게 JSON 에러를 내려줌
+        return jsonify({"status": "error", "message": "구글 서버 과부하. 10초 뒤에 다시 눌러주세요!"}), 500
 
-    # ⚔️ [픽스 3] 고스트 에디터 (인간미 수술)
-    if mode == 'naver':
-        ghost_dict = {"요약하자면": "솔직히 정리해보면", "결론적으로": "아무튼 팩트는", "중요합니다": "진짜 중요해요!"}
-        for k, v in ghost_dict.items():
-            content['html'] = content['html'].replace(k, v)
+    try:
+        # 🛡️ 융통성 패치 적용: 데이터가 누락되어도 .get()으로 에러 원천 차단
+        final_html = content.get('html', '<p>본문 생성 실패</p>')
 
-    # 🎨 [픽스 4] 이미지 깨짐 방지 보호막
-    generated_images = []
-    for i, img_p in enumerate(content.get('img_prompts', [])):
-        filename = f"os_v51_{int(time.time())}_{i}.jpg"
-        save_path = os.path.join(IMAGE_FOLDER, filename)
-        url = f"https://pollinations.ai/p/{requests.utils.quote(img_p)}?width=768&height=1024&model=flux&nologo=true"
-        
-        try:
-            img_r = requests.get(url, timeout=30)
-            # 🛡️ '이미지' 데이터가 확실할 때만 저장!
-            if img_r.status_code == 200 and 'image' in img_r.headers.get('Content-Type', ''):
-                with open(save_path, 'wb') as f:
-                    f.write(img_r.content)
-                generated_images.append(f"/static/images/{filename}")
-            else: raise Exception("Invalid Content")
-        except:
-            # 실패 시 스마트 폴백 배너 삽입
-            placeholder = f'<div style="background:#fff3e0; padding:30px; border:2px dashed #ffb74d; border-radius:10px; color:#e65100; margin:30px 0;">🎁 [한정특가] {keyword} 관련 시크릿 혜택 확인하기</div>'
-            generated_images.append(placeholder)
+        if mode == 'naver':
+            ghost_dict = {"요약하자면": "솔직히 정리해보면", "결론적으로": "아무튼 팩트는", "중요합니다": "진짜 중요해요!"}
+            for k, v in ghost_dict.items():
+                final_html = final_html.replace(k, v)
 
-    final_html = content['html']
-    for i, img_data in enumerate(generated_images):
-        tag = f'<img src="{img_data}">' if img_data.startswith('/static') else img_data
-        final_html = final_html.replace(f"[IMG_{i+1}]", tag)
+        generated_images = []
+        for i, img_p in enumerate(content.get('img_prompts', [])):
+            filename = f"os_v51_{int(time.time())}_{i}.jpg"
+            save_path = os.path.join(IMAGE_FOLDER, filename)
+            url = f"https://pollinations.ai/p/{requests.utils.quote(img_p)}?width=768&height=1024&model=flux&nologo=true"
+            
+            try:
+                img_r = requests.get(url, timeout=30)
+                if img_r.status_code == 200 and 'image' in img_r.headers.get('Content-Type', ''):
+                    with open(save_path, 'wb') as f:
+                        f.write(img_r.content)
+                    generated_images.append(f"/static/images/{filename}")
+                else: raise Exception("Invalid Content")
+            except:
+                placeholder = f'<div style="background:#fff3e0; padding:30px; border:2px dashed #ffb74d; border-radius:10px; color:#e65100; margin:30px 0;">🎁 [한정특가] {keyword} 관련 시크릿 혜택 확인하기</div>'
+                generated_images.append(placeholder)
 
-    # 클로킹 된 수익 링크 생성
-    cloaked_link = f"/go?target=https://link.coupang.com/a/YOUR_ID"
+        for i, img_data in enumerate(generated_images):
+            tag = f'<img src="{img_data}">' if img_data.startswith('/static') else img_data
+            final_html = final_html.replace(f"[IMG_{i+1}]", tag)
 
-    return jsonify({
-        "status": "success",
-        "title": content['title'],
-        "html": final_html,
-        "cliffhanger": content['cliffhanger'],
-        "cpa_banner": content['cpa_banner'],
-        "shorts_script": content['shorts_script'],
-        "stats": content['stats'],
-        "seo_tags": content['seo_tags'],
-        "insta_caption": content['insta_caption'],
-        "img_prompts": content['img_prompts'],
-        "cloaked_cpa_link": cloaked_link
-    })
+        cloaked_link = f"/go?target=https://link.coupang.com/a/YOUR_ID"
+
+        # 🛡️ 안전하게 JSON 반환 (KeyError 완전 박멸)
+        return jsonify({
+            "status": "success",
+            "title": content.get('title', '제목을 불러오지 못했습니다'),
+            "html": final_html,
+            "cliffhanger": content.get('cliffhanger', '비공개 정보는 다음 글에서...'),
+            "cpa_banner": content.get('cpa_banner', '클릭해서 혜택을 확인하세요!'),
+            "shorts_script": content.get('shorts_script', '쇼츠 대본 생성 중 오류 발생'),
+            "stats": content.get('stats', {"views": 0, "revenue": 0}),
+            "seo_tags": content.get('seo_tags', ['#트렌드', '#추천']),
+            "insta_caption": content.get('insta_caption', '프로필 링크를 확인해주세요!'),
+            "img_prompts": content.get('img_prompts', []),
+            "cloaked_cpa_link": cloaked_link
+        })
+    
+    except Exception as e:
+        print(f"🚨 파이썬 내부 조립 에러: {traceback.format_exc()}")
+        return jsonify({"status": "error", "message": "데이터 조립 중 서버 에러가 발생했습니다."}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
