@@ -2,159 +2,304 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>🚀 오스(Os) 컨트롤 타워 v3.0</title>
+    <title>Os Studio v4.3 - Profit Funnel Machine</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Nanum+Gothic:wght@400;700&display=swap');
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; }
-        .container { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: 320px 1fr; gap: 20px; }
-        .panel { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        h2 { margin-top: 0; color: #2c3e50; font-size: 18px; border-bottom: 2px solid #eee; padding-bottom: 10px; }
-        .btn { background-color: #03c75a; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
-        .btn:hover { background-color: #02b350; }
-        .btn-copy { background-color: #2980b9; font-size: 15px; padding: 13px; }
-        .btn-copy:hover { background-color: #2471a3; }
-        input[type="text"] { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; margin-bottom: 10px; }
-        .trend-category { margin-top: 15px; font-weight: bold; color: #e74c3c; font-size: 14px; }
-        .trend-item { padding: 8px; background: #f8f9fa; margin-bottom: 5px; border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 13px;}
-        .trend-item:hover { background: #e9ecef; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { display: flex; font-family: 'Nanum Gothic', sans-serif; background: #f0f2f5; height: 100vh; overflow: hidden; }
 
-        /* ✨ 네이버 블로그 실규격 클론 에디터 */
-        .editor-wrapper { background-color: #f4f4f4; padding: 20px; border-radius: 8px; margin-bottom: 12px; }
-        #naver-editor-body {
-            width: 100%;
-            max-width: 700px;
-            margin: 0 auto;
-            padding: 50px 30px;
-            background-color: #ffffff;
-            min-height: 600px;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-            font-family: 'Nanum Gothic', sans-serif;
-            text-align: center;
-            line-height: 2.2;
-            color: #333;
-            outline: none;
-            word-break: keep-all;
-            font-size: 16px;
-        }
-        #naver-editor-body img {
-            max-width: 100%;
-            height: auto;
-            margin: 30px auto;
-            border-radius: 8px;
-            display: block;
-        }
-        .editor-title-area {
-            font-size: 26px;
-            font-weight: bold;
-            margin-bottom: 40px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid #eee;
-            color: #1a1a1a;
-        }
-        .editor-placeholder { text-align: center; color: #aaa; margin-top: 150px; font-size: 15px; }
+        /* 사이드바 */
+        #sidebar { width: 270px; background: #fff; border-right: 1px solid #e0e0e0; padding: 20px; overflow-y: auto; flex-shrink: 0; }
+        #sidebar h2 { color: #2db400; font-size: 17px; margin-bottom: 15px; }
+        .trend-section { margin-bottom: 25px; }
+        .trend-section h4 { color: #666; font-size: 12px; margin-bottom: 8px; }
+        .trend-item { padding: 7px 10px; cursor: pointer; border-radius: 6px; font-size: 12px; transition: 0.2s; margin-bottom: 2px; }
+        .trend-item:hover { background: #e8f5e9; color: #2db400; }
+
+        #mode-selector { display: flex; gap: 8px; margin-bottom: 15px; }
+        .mode-btn { padding: 6px 14px; border-radius: 20px; cursor: pointer; border: 2px solid #ddd; background: #fff; font-size: 12px; font-weight: bold; transition: 0.3s; }
+        .mode-btn.naver-active { background: #03c75a; color: white; border-color: #03c75a; }
+        .mode-btn.blogspot-active { background: #ff5722; color: white; border-color: #ff5722; }
+        .refresh-btn { width: 100%; padding: 7px; background: #6c757d; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 11px; margin-top: 10px; }
+
+        /* 메인 */
+        #main { flex: 1; display: flex; flex-direction: column; overflow-y: auto; align-items: center; }
+        #toolbar { width: 100%; background: #fff; padding: 12px 20px; border-bottom: 1px solid #ddd; display: flex; justify-content: center; gap: 10px; position: sticky; top: 0; z-index: 100; }
+        #toolbar input { width: 320px; padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
+        #toolbar button { background: #2db400; color: white; border: none; padding: 10px 22px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 14px; }
+        #toolbar button:hover { background: #249d00; }
+
+        /* 에디터 */
+        #editor-container { width: 100%; max-width: 750px; background: #fff; margin: 30px 0; padding: 50px 40px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); min-height: 800px; position: relative; border-radius: 4px; }
+
+        /* A/B 타이틀 */
+        .title-box { padding: 14px 18px; margin-bottom: 12px; font-weight: bold; font-size: 17px; border-radius: 8px; display: none; }
+        .title-box.naver { background: #e8f5e9; border-left: 4px solid #2db400; color: #1b5e20; }
+        .title-box.blogspot { background: #fbe9e7; border-left: 4px solid #ff5722; color: #bf360c; }
+
+        #blog-editor { border: none; width: 100%; min-height: 400px; outline: none; font-size: 16px; line-height: 2.2; text-align: center; color: #333; margin-top: 20px; }
+        #blog-editor img { max-width: 100%; border-radius: 10px; margin: 25px auto; display: block; }
+
+        /* 수익 뱃지 */
+        #stats-badge { display: none; position: absolute; top: 15px; right: 15px; background: linear-gradient(135deg, #e3f2fd, #bbdefb); color: #1565c0; padding: 10px 14px; border-radius: 12px; font-size: 12px; font-weight: bold; }
+
+        /* 클리프행어 */
+        .cliffhanger-block { background: #111; color: #fff; padding: 22px; border-radius: 12px; margin-top: 40px; text-align: center; font-weight: bold; font-size: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); display: none; }
+
+        /* CPA 배너 */
+        .cpa-banner { background: linear-gradient(135deg, #ff416c, #ff4b2b); color: white; padding: 25px; border-radius: 15px; margin-top: 20px; text-align: center; cursor: pointer; transition: 0.3s; display: none; animation: pulse 2s infinite; }
+        .cpa-banner:hover { transform: scale(1.02); }
+        .cpa-banner h3 { margin: 0 0 8px 0; font-size: 20px; }
+        .cpa-banner p { margin: 0; }
+        @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(255,65,108,0.7)} 70%{box-shadow:0 0 0 15px rgba(255,65,108,0)} 100%{box-shadow:0 0 0 0 rgba(255,65,108,0)} }
+
+        /* 앵커링 */
+        .anchoring-block { background: #fafafa; border: 1px solid #eee; padding: 25px; border-radius: 15px; margin-top: 35px; text-align: left; display: none; }
+        .anchoring-block h3 { margin-bottom: 10px; font-size: 15px; }
+        .quiz-option { display: block; background: #fff; border: 1px solid #ddd; padding: 10px 14px; margin: 4px 0; border-radius: 8px; cursor: pointer; font-size: 13px; transition: 0.2s; }
+        .quiz-option:hover { background: #f0f0f0; }
+        .quiz-option.correct { background: #c8e6c9; border-color: #4caf50; }
+        .quiz-option.wrong { background: #ffcdd2; border-color: #e53935; }
+
+        /* 하단 패널 */
+        .bottom-panels { display: flex; gap: 15px; width: 100%; max-width: 750px; margin-bottom: 30px; }
+        .panel { flex: 1; padding: 18px; border-radius: 12px; font-size: 13px; display: none; }
+        #shorts-preview { background: linear-gradient(135deg, #ffebee, #fce4ec); border: 1px solid #ffcdd2; }
+        #shorts-preview h4 { color: #c62828; margin-bottom: 8px; }
+        #shorts-script { white-space: pre-wrap; line-height: 1.7; }
+        #coupang-preview { background: linear-gradient(135deg, #fffde7, #fff8e1); border: 2px dashed #ffd54f; }
+        #coupang-preview h4 { color: #e91e63; margin-bottom: 8px; }
+        .product-item { padding: 8px 12px; background: white; margin-bottom: 5px; border-radius: 8px; border-left: 3px solid #e91e63; font-size: 13px; }
+
+        .copy-bar { width: 100%; max-width: 750px; margin-bottom: 40px; }
+        .btn-copy { width: 100%; background: #2980b9; color: white; border: none; padding: 13px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 14px; }
+        .btn-copy:hover { background: #2471a3; }
+
+        /* 로딩 */
+        #loading { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); background: rgba(0,0,0,0.85); color: #fff; padding: 25px 40px; border-radius: 30px; z-index: 1000; font-size: 14px; text-align: center; }
+        .spinner { border: 3px solid rgba(255,255,255,0.2); border-top: 3px solid #fff; border-radius: 50%; width: 28px; height: 28px; animation: spin .8s linear infinite; margin: 0 auto 10px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
-    <h1 style="text-align: center; color: #2c3e50;">🚀 오스(Os) 통합 콘텐츠 공장 v3.0</h1>
-    <div class="container">
-        <div class="panel">
-            <h2>🔥 AI 실시간 트렌드 레이더</h2>
-            <div id="trends-container"><p style="color: #888;">로딩 중...</p></div>
-            <button class="btn" style="background-color: #6c757d;" onclick="loadTrends()">🔄 트렌드 새로고침</button>
+    <div id="loading"><div class="spinner"></div>AI가 극한 수익화 원고(4단 콤보)를 생성 중...</div>
+
+    <div id="sidebar">
+        <h2>📡 Os Radar v4.3</h2>
+        <div id="mode-selector">
+            <div id="btn-naver" class="mode-btn naver-active" onclick="setMode('naver')">📗 Naver</div>
+            <div id="btn-blogspot" class="mode-btn" onclick="setMode('blogspot')">📙 Blogspot</div>
         </div>
-        
-        <div class="panel">
-            <h2>🎯 통합 원고 & 썸네일 자동화</h2>
-            <input type="text" id="keyword-input" placeholder="키워드를 입력하세요 (예: 봄철 피부 관리법)">
-            <button class="btn" style="background-color: #8e44ad; font-size: 16px; padding: 15px;" onclick="generateAll()">✨ 블로그 원고 + 고화질 썸네일 동시 생성</button>
-            
-            <h2 style="margin-top: 30px;">🎨 네이버 클론 에디터 <small style="font-size:12px; color:#888; font-weight:normal;">(700px 실규격)</small></h2>
-            <div class="editor-wrapper">
-                <div id="naver-editor-body" contenteditable="true">
-                    <div class="editor-placeholder">✨ 원고를 생성하면 이곳에<br>네이버 블로그 실규격으로 렌더링됩니다.</div>
+        <div class="trend-section">
+            <h4>🔍 실시간 검색용</h4>
+            <div id="search-trends"><span style="color:#aaa;">로딩 중...</span></div>
+        </div>
+        <div class="trend-section">
+            <h4>🏠 홈판 공략용</h4>
+            <div id="home-trends"><span style="color:#aaa;">로딩 중...</span></div>
+        </div>
+        <button class="refresh-btn" onclick="loadTrends()">🔄 트렌드 새로고침</button>
+    </div>
+
+    <div id="main">
+        <div id="toolbar">
+            <input type="text" id="target-keyword" placeholder="키워드를 입력하세요">
+            <button onclick="generateContent()">💸 강력 수익화 생성</button>
+        </div>
+
+        <div id="editor-container">
+            <div id="stats-badge">📈 예상 조회수: <span id="val-views">-</span>회 | 💰 예상 수익: <span id="val-rev">-</span>원</div>
+
+            <div id="title-naver" class="title-box naver"></div>
+            <div id="title-blogspot" class="title-box blogspot"></div>
+
+            <div id="blog-editor" contenteditable="true">
+                <div style="text-align:center; color:#aaa; margin-top:120px; font-size:14px;">
+                    ✨ 원고를 생성하면 이곳에<br>A/B 타이틀 + 본문 + 클리프행어 + CPA 배너가 렌더링됩니다.
                 </div>
             </div>
-            <button class="btn btn-copy" onclick="copyRichText()">📋 네이버 서식 그대로 복사하기</button>
-        </div>
-        
-        <div class="panel" style="grid-column: 1 / -1;">
-            <h2>🎥 추출된 썸네일 실사 이미지 갤러리</h2>
-            <div id="storyboard-box" style="border: 1px dashed #ccc; padding: 20px; min-height: 250px; background: #fff; border-radius: 8px;">
-                <p style="text-align: center; color: #888; margin-top: 100px;">원고 내용에 찰떡같이 맞는 고화질 실사 이미지가 이곳에 렌더링됩니다.</p>
+
+            <!-- 클리프행어 -->
+            <div class="cliffhanger-block" id="cliffhanger-area"></div>
+
+            <!-- CPA 배너 -->
+            <div class="cpa-banner" id="cpa-area" onclick="alert('CPA 수익 링크로 이동합니다!')">
+                <h3>🚨 [긴급/한정]</h3>
+                <p id="cpa-text" style="font-size:17px; font-weight:bold;"></p>
+                <p style="font-size:12px; margin-top:8px; opacity:0.8;">(지금 바로 클릭하여 혜택을 확인하세요)</p>
             </div>
+
+            <!-- 앵커링: 요약 + 퀴즈 -->
+            <div class="anchoring-block" id="anchoring-area">
+                <h3 style="color:#2db400;">💡 3줄 요약</h3>
+                <ul id="summary-list" style="margin-bottom:20px; line-height:1.8; color:#555;"></ul>
+                <h3 style="color:#ff5722;">🎯 깜짝 퀴즈</h3>
+                <p id="quiz-question" style="font-weight:bold; margin-bottom:8px;"></p>
+                <div id="quiz-container"></div>
+                <p id="quiz-result" style="margin-top:8px; font-weight:bold; display:none;"></p>
+            </div>
+        </div>
+
+        <div class="bottom-panels">
+            <div class="panel" id="shorts-preview">
+                <h4>🎬 유튜브 쇼츠 대본</h4>
+                <div id="shorts-script"></div>
+            </div>
+            <div class="panel" id="coupang-preview">
+                <h4>🛒 쿠팡 파트너스 추천</h4>
+                <div id="product-list"></div>
+            </div>
+        </div>
+
+        <div class="copy-bar">
+            <button class="btn-copy" onclick="copyRichText()">📋 블로그 서식 그대로 복사하기</button>
         </div>
     </div>
 
     <script>
+        let currentMode = 'naver';
         window.onload = loadTrends;
-        
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.getElementById('btn-naver').classList.remove('naver-active');
+            document.getElementById('btn-blogspot').classList.remove('blogspot-active');
+            if (mode === 'naver') document.getElementById('btn-naver').classList.add('naver-active');
+            else document.getElementById('btn-blogspot').classList.add('blogspot-active');
+        }
+
         async function loadTrends() {
-            const container = document.getElementById('trends-container');
-            container.innerHTML = '<p style="color: #888;">⏳ 제미나이가 실시간 트렌드를 분석 중입니다...</p>';
+            document.getElementById('search-trends').innerHTML = '<span style="color:#aaa;">⏳ RSS 수집 중...</span>';
+            document.getElementById('home-trends').innerHTML = '<span style="color:#aaa;">⏳ RSS 수집 중...</span>';
             try {
                 const res = await fetch('/api/trends');
                 const data = await res.json();
-                
-                let html = '<div class="trend-category">🔍 검색 노출 추천 (Search)</div>';
-                data.search_trends.forEach((kw, i) => {
-                    html += `<div class="trend-item" onclick="document.getElementById('keyword-input').value='${kw}'"><span><strong>${i+1}.</strong> ${kw}</span><span style="font-size:11px; color:#03c75a;">선택 👆</span></div>`;
-                });
-                
-                html += '<div class="trend-category" style="color: #3498db; margin-top: 20px;">🏠 홈판 이슈 추천 (Home)</div>';
-                data.home_trends.forEach((kw, i) => {
-                    html += `<div class="trend-item" onclick="document.getElementById('keyword-input').value='${kw}'"><span><strong>${i+1}.</strong> ${kw}</span><span style="font-size:11px; color:#03c75a;">선택 👆</span></div>`;
-                });
-                
-                container.innerHTML = html;
+                document.getElementById('search-trends').innerHTML = data.search_trends.map((kw, i) =>
+                    `<div class="trend-item" onclick="document.getElementById('target-keyword').value='${kw.replace(/'/g,"\\'")}'"><strong>${i+1}.</strong> ${kw}</div>`
+                ).join('');
+                document.getElementById('home-trends').innerHTML = data.home_trends.map((kw, i) =>
+                    `<div class="trend-item" onclick="document.getElementById('target-keyword').value='${kw.replace(/'/g,"\\'")}'"><strong>${i+1}.</strong> ${kw}</div>`
+                ).join('');
             } catch (e) {
-                container.innerHTML = '<p style="color:red;">트렌드 로딩 실패</p>';
+                document.getElementById('search-trends').innerHTML = '<span style="color:red;">로딩 실패</span>';
             }
         }
 
-        async function generateAll() {
-            const kw = document.getElementById('keyword-input').value;
-            if(!kw) return alert('키워드를 입력해주세요!');
-            
-            const editor = document.getElementById('naver-editor-body');
-            const imgBox = document.getElementById('storyboard-box');
-            
-            editor.innerHTML = '<div class="editor-placeholder">⏳ <strong>AI 수석 작가</strong>가 원고를 집필 중입니다...<br><small style="color:#aaa;">(약 20~40초 소요)</small></div>';
-            imgBox.innerHTML = '<p style="text-align:center; color:#888; margin-top:60px;">원고 생성 완료 후 이미지가 여기에 표시됩니다.</p>';
-            
+        async function generateContent() {
+            const kw = document.getElementById('target-keyword').value;
+            if (!kw) return alert('키워드를 입력해주세요!');
+
+            document.getElementById('loading').style.display = 'block';
+            // 초기화
+            ['stats-badge','title-naver','title-blogspot','cliffhanger-area','cpa-area','anchoring-area','shorts-preview','coupang-preview'].forEach(id => document.getElementById(id).style.display = 'none');
+            document.getElementById('blog-editor').innerHTML = '<div style="text-align:center;color:#aaa;margin-top:120px;">⏳ AI 엔진 가동 중...</div>';
+
             try {
-                const res = await fetch('/api/generate-full', { 
-                    method: 'POST', 
-                    headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify({ keyword: kw }) 
+                const res = await fetch('/api/generate-full', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ keyword: kw, mode: currentMode })
                 });
-                const response = await res.json();
-                
-                if (response.status === 'success') {
-                    // 네이버 클론 에디터에 원고 렌더링
-                    editor.innerHTML = `<div class="editor-title-area">📝 ${response.title}</div>${response.html}`;
-                    
-                    imgBox.innerHTML = `<div style="padding: 20px; text-align: center; background: #f0faf5; border-radius: 8px; border: 1px solid #03c75a;">
-                        <h3 style="color: #03c75a;">✅ 원고 + 이미지 생성 완료!</h3>
-                        <p style="color: #555;">이미지가 원고 내 삽입되었습니다.<br>📋 복사 버튼으로 네이버 블로그에 바로 붙여넣기 하세요!</p>
-                    </div>`;
+                const r = await res.json();
+
+                if (r.status === 'success') {
+                    // A/B 타이틀
+                    if (r.title_naver) {
+                        document.getElementById('title-naver').innerHTML = `🟩 Naver: ${r.title_naver}`;
+                        document.getElementById('title-naver').style.display = 'block';
+                    }
+                    if (r.title_blogspot) {
+                        document.getElementById('title-blogspot').innerHTML = `🟧 Blogspot: ${r.title_blogspot}`;
+                        document.getElementById('title-blogspot').style.display = 'block';
+                    }
+
+                    // 본문
+                    document.getElementById('blog-editor').innerHTML = r.html;
+
+                    // 수익 뱃지
+                    if (r.stats) {
+                        document.getElementById('val-views').textContent = typeof r.stats.views === 'number' ? r.stats.views.toLocaleString() : r.stats.views;
+                        document.getElementById('val-rev').textContent = typeof r.stats.revenue === 'number' ? r.stats.revenue.toLocaleString() : r.stats.revenue;
+                        document.getElementById('stats-badge').style.display = 'block';
+                    }
+
+                    // 클리프행어
+                    if (r.cliffhanger) {
+                        document.getElementById('cliffhanger-area').innerHTML = `🔒 ${r.cliffhanger}`;
+                        document.getElementById('cliffhanger-area').style.display = 'block';
+                    }
+
+                    // CPA 배너
+                    if (r.cpa_banner) {
+                        document.getElementById('cpa-text').textContent = r.cpa_banner;
+                        document.getElementById('cpa-area').style.display = 'block';
+                    }
+
+                    // 요약 + 퀴즈
+                    if (r.summary) {
+                        const list = document.getElementById('summary-list');
+                        if (Array.isArray(r.summary)) {
+                            list.innerHTML = r.summary.map(s => `<li>${s}</li>`).join('');
+                        } else {
+                            list.innerHTML = `<li>${r.summary}</li>`;
+                        }
+                        document.getElementById('anchoring-area').style.display = 'block';
+                    }
+                    if (r.quiz) {
+                        document.getElementById('quiz-question').textContent = `Q. ${r.quiz.question}`;
+                        document.getElementById('quiz-container').innerHTML = r.quiz.options.map((opt, i) =>
+                            `<div class="quiz-option" onclick="checkAnswer(this,${i},${r.quiz.answer})">${i+1}. ${opt}</div>`
+                        ).join('');
+                        document.getElementById('quiz-result').style.display = 'none';
+                    }
+
+                    // 쇼츠
+                    if (r.shorts_script) {
+                        document.getElementById('shorts-script').textContent = r.shorts_script;
+                        document.getElementById('shorts-preview').style.display = 'block';
+                    }
+
+                    // 쿠팡
+                    if (r.products && r.products.length > 0) {
+                        document.getElementById('product-list').innerHTML = r.products.map(p =>
+                            `<div class="product-item">📦 <strong>${p.name}</strong> <span style="color:#e91e63;margin-left:6px;">💰</span></div>`
+                        ).join('');
+                        document.getElementById('coupang-preview').style.display = 'block';
+                    }
+
+                    // 이미지 캐시 방지
+                    document.getElementById('blog-editor').querySelectorAll('img').forEach(img => {
+                        img.src = img.src.split('?')[0] + '?t=' + Date.now();
+                    });
                 } else {
-                    editor.innerHTML = `<div style="color:red; text-align:center; margin-top:100px; padding:20px;">🚨 에러: ${response.message}</div>`;
-                    imgBox.innerHTML = '';
+                    document.getElementById('blog-editor').innerHTML = `<div style="color:red;text-align:center;margin-top:100px;">🚨 ${r.message}<br><small style="color:#888;">${r.debug||''}</small></div>`;
                 }
             } catch (err) {
-                editor.innerHTML = `<div style="color:red; text-align:center; margin-top:100px;">통신 에러 발생: ${err.message}</div>`;
+                document.getElementById('blog-editor').innerHTML = `<div style="color:red;text-align:center;margin-top:100px;">통신 에러: ${err.message}</div>`;
+            } finally {
+                document.getElementById('loading').style.display = 'none';
             }
+        }
+
+        function checkAnswer(el, selected, correct) {
+            document.querySelectorAll('.quiz-option').forEach((o, i) => {
+                o.style.pointerEvents = 'none';
+                if (i === correct) o.classList.add('correct');
+                else if (i === selected) o.classList.add('wrong');
+            });
+            const result = document.getElementById('quiz-result');
+            result.style.display = 'block';
+            result.textContent = selected === correct ? '🎉 정답입니다!' : '❌ 오답! 정답은 초록색입니다.';
+            result.style.color = selected === correct ? '#2e7d32' : '#c62828';
         }
 
         async function copyRichText() {
-            const editor = document.getElementById('naver-editor-body');
-            if (editor.innerText.includes('원고를 생성하면 이곳에')) return alert('먼저 원고를 생성해주세요!');
+            const editor = document.getElementById('blog-editor');
+            if (editor.innerText.includes('원고를 생성하면')) return alert('먼저 원고를 생성해주세요!');
             try {
-                const html = editor.innerHTML;
-                const blob = new Blob([html], { type: 'text/html' });
-                const item = new ClipboardItem({ 'text/html': blob });
-                await navigator.clipboard.write([item]);
-                alert('✅ 복사 성공! 네이버 블로그 스마트에디터에서 Ctrl+V 를 누르세요.');
+                const blob = new Blob([editor.innerHTML], { type: 'text/html' });
+                await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob })]);
+                alert('✅ 복사 완료! 블로그 에디터에서 Ctrl+V 하세요.');
             } catch (err) { alert('복사 실패. 브라우저 설정을 확인해주세요.'); }
         }
     </script>

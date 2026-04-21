@@ -1,151 +1,285 @@
-from flask import Flask, render_template, request, jsonify
-import google.generativeai as genai
 import os
 import json
 import re
 import time
-import datetime
 import requests
+import traceback
+from flask import Flask, request, jsonify, render_template_string, redirect
+import google.generativeai as genai
 from dotenv import load_dotenv
 
-# 1. 환경 변수 로드
 load_dotenv()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-# 2. 제미나이 통합 엔진 세팅
-genai.configure(api_key=GEMINI_API_KEY)
-text_model = genai.GenerativeModel('gemini-2.5-flash')
-
-# 3. 절대경로로 이미지 저장 폴더 확보
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-IMG_DIR = os.path.join(BASE_DIR, 'static', 'images')
-os.makedirs(IMG_DIR, exist_ok=True)
-print(f"[IMG_DIR] {IMG_DIR}")
+# 🛡️ [폴백 체인 준비] 무거운 모델 -> 가벼운 모델 순서
+MODELS = ['gemini-1.5-pro', 'gemini-1.5-flash'] 
 
 app = Flask(__name__)
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+IMAGE_FOLDER = os.path.join(BASE_DIR, 'static', 'images')
+os.makedirs(IMAGE_FOLDER, exist_ok=True)
 
-# 📡 실시간 트렌드 레이더
+# ----------------------------------------------------------------
+# [FRONT-END] 대시보드 (v4.5와 동일 구조, 상태창 강화)
+# ----------------------------------------------------------------
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Os Studio v5.0 - The One Ring</title>
+    <style>
+        body { margin: 0; display: flex; font-family: 'Nanum Gothic', sans-serif; background: #f0f2f5; height: 100vh; overflow: hidden; }
+        #sidebar { width: 280px; background: #fff; border-right: 1px solid #ddd; padding: 20px; overflow-y: auto; flex-shrink: 0; }
+        .trend-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; font-size: 14px; transition: 0.2s; }
+        .trend-item:hover { background: #f1f8e9; color: #2db400; font-weight:bold; }
+        #main-container { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        #toolbar { background: #fff; padding: 15px; border-bottom: 1px solid #ddd; display: flex; justify-content: center; gap: 15px; align-items: center; z-index: 10; }
+        #content-area { display: flex; flex: 1; overflow-y: auto; padding: 20px; gap: 20px; justify-content: center; }
+        #editor-canvas { width: 700px; background: #fff; padding: 50px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); min-height: 1200px; }
+        #title-display { font-size: 26px; font-weight: bold; text-align: center; margin-bottom: 30px; border-bottom: 2px solid #eee; padding-bottom: 15px; }
+        #editor-body { font-size: 17px; line-height: 2.2; text-align: center; outline: none; color: #333; }
+        img { max-width: 100%; border-radius: 12px; margin: 30px 0; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        .cliffhanger { background:#111; color:#fff; padding:20px; border-radius:10px; margin-top:40px; text-align:center; font-weight:bold; }
+        .cpa-banner { background: linear-gradient(135deg, #ff416c, #ff4b2b); color: white; padding: 20px; border-radius: 10px; text-align: center; margin-top: 20px; cursor: pointer; animation: pulse 2s infinite; text-decoration: none; display: block; }
+        @keyframes pulse { 0% {box-shadow: 0 0 0 0 rgba(255,65,108,0.7);} 70% {box-shadow: 0 0 0 15px rgba(255,65,108,0);} 100% {box-shadow: 0 0 0 0 rgba(255,65,108,0);} }
+        /* 구글 스니펫 스내처 박스 */
+        .snippet-box { background: #f8f9fa; border-left: 5px solid #4285f4; padding: 20px; margin-bottom: 30px; text-align: left; }
+        #right-panel { width: 400px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; padding-right: 10px; }
+        .info-card { background: #fff; padding: 20px; border-radius: 12px; border: 1px solid #ddd; box-shadow: 0 2px 8px rgba(0,0,0,0.05); font-size: 14px; }
+        .card-title { font-weight: bold; margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px; color: #333; }
+        pre { white-space: pre-wrap; font-family: 'Nanum Gothic', sans-serif; background: #f9f9f9; padding: 10px; border-radius: 5px; font-size: 13px; line-height: 1.5; }
+        #loading-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1000; color: #fff; flex-direction: column; justify-content: center; align-items: center; }
+        #log-window { margin-top: 20px; font-family: monospace; color: #0f0; background: #000; padding: 10px; border-radius: 5px; width: 600px; height: 100px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <div id="loading-overlay">
+        <h1 style="color: #2db400;">💍 v5.0 절대 반지 가동 중...</h1>
+        <p>방어막 및 공격형 SEO 로직이 활성화되었습니다.</p>
+        <div id="log-window">시스템 부팅...</div>
+    </div>
+    <div id="sidebar"><h2 style="color: #2db400;">Os Radar 📡</h2><div id="search-trends"></div><hr><div id="home-trends"></div></div>
+    <div id="main-container">
+        <div id="toolbar">
+            <select id="mode-select" style="padding: 10px; border-radius: 5px; border: 1px solid #ddd;">
+                <option value="naver">Naver (고스트 에디터 ON)</option>
+                <option value="blogspot">Blogspot (구글 스니펫 ON)</option>
+            </select>
+            <input type="text" id="target-keyword" placeholder="키워드 입력" style="width: 300px; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+            <button onclick="generateAll()" style="background: #2db400; color: white; border: none; padding: 12px 25px; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 15px;">💍 v5.0 통합 생성</button>
+        </div>
+        <div id="content-area">
+            <div id="editor-canvas">
+                <div id="title-display">제목</div>
+                <div id="editor-body" contenteditable="true"><p style="color:#aaa;">대기 중...</p></div>
+                <div id="funnel-area"></div>
+            </div>
+            <div id="right-panel">
+                <div class="info-card" id="seo-status"></div>
+                <div class="info-card" id="shorts-status"></div>
+                <div class="info-card" id="cpa-status"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function logMsg(msg) { 
+            const lw = document.getElementById('log-window');
+            lw.innerHTML += `<div>> ${msg}</div>`;
+            lw.scrollTop = lw.scrollHeight;
+        }
+
+        async function loadTrends() {
+            const res = await fetch('/api/trends');
+            const data = await res.json();
+            document.getElementById('search-trends').innerHTML = '<h4>🔍 검색 노출용</h4>' + data.search_trends.map(t => `<div class="trend-item" onclick="setKeyword('${t}')">${t}</div>`).join('');
+            document.getElementById('home-trends').innerHTML = '<h4>🏠 홈판 공략용</h4>' + data.home_trends.map(t => `<div class="trend-item" onclick="setKeyword('${t}')">${t}</div>`).join('');
+        }
+        function setKeyword(k) { document.getElementById('target-keyword').value = k; }
+
+        async function generateAll() {
+            const kw = document.getElementById('target-keyword').value;
+            const mode = document.getElementById('mode-select').value;
+            if(!kw) return;
+            document.getElementById('loading-overlay').style.display = 'flex';
+            document.getElementById('log-window').innerHTML = '';
+            logMsg(`엔진 시작: '${kw}'`);
+            
+            try {
+                const res = await fetch('/api/generate-full', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ keyword: kw, mode: mode })
+                });
+                const data = await res.json();
+
+                if(data.status === "success") {
+                    document.getElementById('title-display').innerHTML = data.title;
+                    document.getElementById('editor-body').innerHTML = data.html;
+                    
+                    // CPA 배너에 클로킹된 링크 적용
+                    document.getElementById('funnel-area').innerHTML = `
+                        <div class="cliffhanger">🔒 ${data.cliffhanger}</div>
+                        <a href="${data.cloaked_cpa_link}" target="_blank" class="cpa-banner">
+                            <h3 style="margin:0 0 10px 0;">🚨 [마감 임박]</h3>
+                            <div style="font-size:18px; font-weight:bold;">${data.cpa_banner}</div>
+                        </a>`;
+
+                    document.getElementById('seo-status').innerHTML = `<div class="card-title">🔥 SEO & 알고리즘 팩</div>
+                        <strong># 키워드 밀도:</strong> ${data.keyword_density}% (자동 패치 완료)<br>
+                        <strong># 해시태그:</strong> ${data.seo_tags.join(' ')}<br>
+                        <strong># 릴스 DM유도:</strong> <pre>${data.insta_caption}</pre>`;
+                    document.getElementById('shorts-status').innerHTML = `<div class="card-title">📱 숏폼 대본 & CF 프롬프트</div>
+                        <pre>${data.shorts_script}</pre>
+                        <div style="font-size:12px; color:#666;">${data.img_prompts.join('<br><br>')}</div>`;
+                    
+                    document.querySelectorAll('#editor-body img').forEach(img => { img.src = img.src.split('?')[0] + "?t=" + new Date().getTime(); });
+                } else { alert("에러: " + data.message); }
+            } catch(e) { alert("통신 실패!"); }
+            finally { document.getElementById('loading-overlay').style.display = 'none'; }
+        }
+        window.onload = loadTrends;
+    </script>
+</body>
+</html>
+"""
+
+# ----------------------------------------------------------------
+# [BACK-END] 절대반지 로직: 방어막 + 공격형 무기
+# ----------------------------------------------------------------
+
+@app.route('/')
+def index(): return render_template_string(HTML_TEMPLATE)
+
 @app.route('/api/trends')
 def get_trends():
     try:
-        today = datetime.datetime.now().strftime("%Y년 %m월 %d일")
-        prompt = f"""
-        오늘은 {today}입니다. 이 날짜를 기준으로 한국 실시간 트렌드 20개를 분석하세요.
-        검색용(Search) 10개, 홈판용(Home) 10개로 나누어 JSON 형식으로만 답변하세요.
-        {{
-            "search_trends": ["키워드1","키워드2","키워드3","키워드4","키워드5","키워드6","키워드7","키워드8","키워드9","키워드10"],
-            "home_trends": ["키워드1","키워드2","키워드3","키워드4","키워드5","키워드6","키워드7","키워드8","키워드9","키워드10"]
-        }}
-        """
-        response = text_model.generate_content(prompt)
-        json_data = json.loads(re.search(r'\{.*\}', response.text, re.DOTALL).group())
-        return jsonify(json_data)
-    except Exception as e:
-        print(f"⚠️ 트렌드 로드 실패 (더미 데이터 사용): {e}")
-        return jsonify({
-            "search_trends": ["환율 전망", "벚꽃 개화시기", "신축 아파트 청약", "아이폰 17 루머", "오늘의 날씨", "주식 시장", "봄 여행지 추천", "건강 검진 예약", "전기차 보조금", "대학 입시 일정"],
-            "home_trends": ["직장인 부업 성공기", "연예인 단골 맛집", "주식 폭락 대비책", "봄철 피부 관리법", "인생 영화 추천", "다이어트 식단", "요즘 뜨는 카페", "자동차 할부 꿀팁", "여행 숙소 비교", "재테크 실패담"]
-        })
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        res = model.generate_content("대한민국 핫트렌드 20개를 검색용 10개, 홈판용 10개로 나누어 JSON {search_trends:[], home_trends:[]} 으로 반환.")
+        return jsonify(json.loads(re.search(r'\{.*\}', res.text, re.DOTALL).group()))
+    except:
+        return jsonify({"search_trends": ["점검중"], "home_trends": ["점검중"]})
 
-# ✍️ & 🎨 [통합 엔진] 네이버 에디터 원고 + 실사 이미지 다운로드 저장
+# ⚔️ [공격 2] CPA 링크 클로킹 라우터 (저품질 회피)
+@app.route('/go')
+def redirect_cpa():
+    target = request.args.get('target', 'https://www.coupang.com')
+    # 내부 서버를 거쳐서 외부로 튕겨냅니다. 블로그 봇은 단순 내부 링크로 인식.
+    return redirect(target)
+
 @app.route('/api/generate-full', methods=['POST'])
 def generate_full():
-    data = request.json
-    keyword = data.get('keyword', '테스트')
-    print(f"\n{'='*50}")
-    print(f"🚀 원고 생성 시작! 키워드: [{keyword}]")
-    print(f"{'='*50}")
+    data = request.get_json()
+    keyword = data.get('keyword')
+    mode = data.get('mode', 'naver')
 
-    try:
-        # 1단계: 제미나이가 원고 + 이미지 프롬프트 동시 생성
-        text_prompt = f"""
-        주제: '{keyword}'
+    prompt = f"""
+    주제: '{keyword}'
+    [작성 규칙]
+    1. html: {'네이버 감성의 구어체' if mode=='naver' else '구글 검색 1위 탈환을 위한 전문적 SEO 문서'}. 
+       - 중간에 '지원금', '환급', '대출' 등 고단가 광고 유발 단어 삽입.
+       - 서로 다른 위치에 [IMG_1], [IMG_2] 삽입 필수.
+       - 최상단에 구글 피처드 스니펫을 노리는 <div class="snippet-box"><h3>💡 핵심 요약 Q&A</h3><ul><li>...</li></ul></div> 를 반드시 포함할 것!
+    2. shorts_script: 60초 숏폼 대본 (시각 지시문 포함).
+    3. cliffhanger & cpa_banner 작성.
+    4. seo_tags (5개) & insta_caption (DM 유도 멘트).
+    5. img_prompts: CF 감독 수준의 수직형(9:16) 실사 이미지 프롬프트 2개 (영어).
+    
+    반드시 JSON으로 반환: {{"title":"", "html":"", "shorts_script":"", "cliffhanger":"", "cpa_banner":"", "seo_tags":[], "insta_caption":"", "img_prompts":[]}}
+    """
+
+    content = None
+    
+    # 🛡️ [방어 3 & 1] 폴백 체인 (Pro -> Flash) 및 길이 검증
+    for model_name in MODELS:
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
+            content = json.loads(re.search(r'\{.*\}', response.text, re.DOTALL).group())
+            
+            # 🛡️ [방어 1] 원고 길이가 너무 짧으면 (예: 500자 이하) 'Auto-Expand' 발동
+            if len(content['html']) < 500:
+                print(f"⚠️ 원고가 짧습니다. {model_name} 로 늘리기 작업(Auto-Expand) 수행 중...")
+                expand_prompt = f"다음 HTML 문서의 끝부분에, '{keyword}'와 관련된 '자주 묻는 질문(FAQ)' 3가지를 추가해서 분량을 늘려줘. 기존 HTML 전체와 합쳐서 JSON {{\"html\":\"...\"}} 으로만 반환해.\n\n{content['html']}"
+                res_expand = model.generate_content(expand_prompt)
+                expanded_data = json.loads(re.search(r'\{.*\}', res_expand.text, re.DOTALL).group())
+                content['html'] = expanded_data['html']
+                
+            break # 성공 시 폴백 체인 탈출
+        except Exception as e:
+            print(f"🚨 {model_name} 실패: {e}. 다음 모델로 넘어갑니다.")
+            continue
+            
+    if not content:
+        return jsonify({"status": "error", "message": "모든 엔진이 과부하 상태입니다. 잠시 후 시도하세요."}), 500
+
+    # ⚔️ [공격 3] The Ghost Editor (자가 검열 로직)
+    if mode == 'naver':
+        # 기계적인 단어를 인간미 넘치는 단어로 쾌속 치환
+        ghost_dict = {
+            "결론적으로": "아무튼 팩트를 말씀드리면",
+            "요약하자면": "솔직히 딱 정리해보면",
+            "이처럼": "진짜 보신 것처럼",
+            "할 수 있습니다": "할 수 있더라고요!",
+            "중요합니다": "진짜 중요해요. (별표 백개!)"
+        }
+        for ai_word, human_word in ghost_dict.items():
+            content['html'] = content['html'].replace(ai_word, human_word)
+
+    # ⚔️ [공격 1] SEO 키워드 밀도 (Density) 패치
+    word_count = len(re.sub(r'<[^>]+>', '', content['html'])) # 태그 제외 글자수
+    kw_count = content['html'].count(keyword)
+    density = (kw_count / word_count * 100) if word_count > 0 else 0
+    
+    if density < 3.0: # 밀도가 3% 미만이면 강제 주입
+        patch_text = f"<br><div style='color:#f0f2f5; font-size:1px;'>{keyword} " * int((word_count * 0.03) - kw_count) + "</div>"
+        content['html'] += patch_text # 독자 눈에는 안 보이고(배경색) 로봇만 읽는 히든 텍스트 주입
+
+    # 🛡️ [방어 2] 이미지 생성 및 실패 시 Smart Fallback Box 삽입
+    generated_images = []
+    for i, img_p in enumerate(content.get('img_prompts', [])):
+        filename = f"os_v5_{int(time.time())}_{i}.jpg"
+        save_path = os.path.join(IMAGE_FOLDER, filename)
+        url = f"https://pollinations.ai/p/{requests.utils.quote(img_p)}?width=768&height=1024&model=flux&nologo=true"
         
-        [작성 지시]
-        - 제목(title): 주제에 어울리는 아이콘(🌿, 🏠, 💰, 💡, ✨ 등 중 선택)을 앞에 붙이고, 폰트는 크게.
-        - 네이버 블로그 HTML 형식으로 작성. (전체를 <div style="text-align:center; line-height:2.2; font-size:16px;">로 감싸세요.)
-        - 절대로 '안녕하세요', '오늘은'으로 시작하지 마세요. 서정적이고 시적인 문장으로 시작하세요.
-        - 원고 중간 자연스러운 위치에 [IMG_1], [IMG_2] 표시를 넣으세요.
-        - 각 이미지 위치에 맞는 상세 영문 이미지 프롬프트를 작성하세요. (Photorealistic, 8K, Cinematic Lighting, NO TEXT, NO NUMBERS 필수)
-        - 하단에 쿠팡 파트너스 추천 상품 2개와 해시태그 5개를 반드시 추가하세요.
-        
-        [출력 형식]: 순수 JSON만 출력하세요. 마크다운 기호(```json)는 절대 금지.
-        {{
-            "title": "아이콘 + 크고 기억에 남는 블로그 제목",
-            "html": "전체 HTML 원고...",
-            "img_prompts": ["이미지1 영문 프롬프트", "이미지2 영문 프롬프트"]
-        }}
-        """
-        print("✏️  제미나이 원고 생성 중...")
-        text_res = text_model.generate_content(text_prompt)
-        raw = re.search(r'\{.*\}', text_res.text, re.DOTALL).group()
-        content = json.loads(raw)
-        print(f"✅ 원고 생성 완료! 제목: {content.get('title', '(제목 없음)')}")
+        try:
+            img_r = requests.get(url, timeout=20)
+            if img_r.status_code == 200 and len(img_r.content) > 1024:
+                with open(save_path, 'wb') as f:
+                    f.write(img_r.content)
+                generated_images.append(f"/static/images/{filename}")
+            else: raise Exception("Invalid Image")
+        except Exception as e:
+            # 실패 시 엑스박스 대신 '광고 배너'로 빈칸 채우기 (스마트 폴백)
+            placeholder = f'<a href="/go?target=https://coupa.ng/YOUR_LINK" style="display:block; background:#fff3e0; padding:30px; text-align:center; border:2px dashed #ffb74d; border-radius:10px; color:#e65100; text-decoration:none; margin:30px 0;">🎁 <strong>{keyword}</strong> 관련 시크릿 특가 확인하기 (클릭)</a>'
+            generated_images.append(placeholder)
 
-        # 2단계: Pollinations.ai로 이미지 다운로드 → 이중 검증 후 로컬 저장
-        generated_image_paths = []
-        img_prompts = content.get('img_prompts', [])
-        print(f"🎨 이미지 {len(img_prompts)}개 생성 시작...")
+    # HTML 내 [IMG_1] 교체
+    final_html = content['html']
+    for i, img_data in enumerate(generated_images):
+        if img_data.startswith('<a '): # 플레이스홀더인 경우
+            final_html = final_html.replace(f"[IMG_{i+1}]", img_data)
+        else: # 정상 이미지인 경우
+            final_html = final_html.replace(f"[IMG_{i+1}]", f'<img src="{img_data}">')
 
-        for i, prompt in enumerate(img_prompts):
-            image_filename = f"os_{int(time.time())}_{i}.jpg"
-            image_path = os.path.join(IMG_DIR, image_filename)
+    # 클로킹 된 CPA 링크 생성
+    cloaked_link = "/go?target=https://link.coupang.com/a/YOUR_CPA_LINK"
 
-            try:
-                encoded_prompt = requests.utils.quote(
-                    f"photorealistic, high quality, NO TEXT, NO NUMBERS, NO WATERMARK: {prompt}"
-                )
-                download_url = (
-                    f"https://pollinations.ai/p/{encoded_prompt}"
-                    f"?width=1024&height=576&model=flux&nologo=true&seed={int(time.time())+i}"
-                )
-                print(f"   [{i+1}/{len(img_prompts)}] 다운로드 중...")
-
-                r = requests.get(download_url, timeout=30)
-
-                # ✅ 이중 검증: HTTP 200 + 최소 1KB 이상이어야 정상 이미지
-                if r.status_code == 200 and len(r.content) > 1024:
-                    with open(image_path, 'wb') as f:
-                        f.write(r.content)
-                    print(f"   ✅ 이미지 저장 성공! 경로: {image_path} ({len(r.content)//1024}KB)")
-                    generated_image_paths.append(f"/static/images/{image_filename}")
-                else:
-                    print(f"   🚨 다운로드 실패 또는 파일 깨짐 (Status: {r.status_code}, Size: {len(r.content)}bytes)")
-
-            except Exception as e:
-                print(f"   🚨 이미지 [{i+1}] 에러: {str(e)}")
-
-        # 3단계: [IMG_N]을 div로 감싼 이미지 태그로 교체 (가운데 정렬 강제)
-        final_html = content.get('html', '')
-        for i, img_url in enumerate(generated_image_paths):
-            img_tag = f"""
-            <div style="text-align: center; margin: 40px 0;">
-                <img src="{img_url}?v={int(time.time())}" style="max-width: 100%; width: 680px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); display: block; margin: 0 auto;">
-                <p style="color: #aaa; font-size: 0.85em; margin-top: 10px;">[AI가 생성한 이미지입니다]</p>
-            </div>
-            """
-            final_html = final_html.replace(f"[IMG_{i+1}]", img_tag)
-
-        # 4단계: 전체 원고를 가운데 정렬 div로 감싸서 반환
-        wrapped_html = f'<div style="text-align: center; line-height: 2.4; font-size: 1.1em;">{final_html}</div>'
-
-        print(f"🏁 완료! 저장된 이미지 수: {len(generated_image_paths)}/{len(img_prompts)}")
-        print(f"{'='*50}\n")
-
-        return jsonify({
-            "status": "success",
-            "title": content.get('title', keyword),
-            "html": wrapped_html
-        })
-
-    except Exception as e:
-        print(f"🚨 치명적 에러 발생: {str(e)}")
-        return jsonify({"status": "error", "message": str(e)})
-
+    return jsonify({
+        "status": "success",
+        "title": content['title'],
+        "html": final_html,
+        "cliffhanger": content['cliffhanger'],
+        "cpa_banner": content['cpa_banner'],
+        "cloaked_cpa_link": cloaked_link,
+        "seo_tags": content['seo_tags'],
+        "insta_caption": content['insta_caption'],
+        "shorts_script": content['shorts_script'],
+        "img_prompts": content['img_prompts'],
+        "keyword_density": round(density, 1)
+    })
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
