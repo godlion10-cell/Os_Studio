@@ -4,19 +4,54 @@
     <meta charset="UTF-8">
     <title>🚀 오스(Os) 컨트롤 타워 v3.0</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Nanum+Gothic:wght@400;700&display=swap');
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; }
-        .container { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 1fr 2fr; gap: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: 320px 1fr; gap: 20px; }
         .panel { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
         h2 { margin-top: 0; color: #2c3e50; font-size: 18px; border-bottom: 2px solid #eee; padding-bottom: 10px; }
         .btn { background-color: #03c75a; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
         .btn:hover { background-color: #02b350; }
-        .btn-copy { background-color: #2980b9; font-size: 16px; padding: 15px; }
+        .btn-copy { background-color: #2980b9; font-size: 15px; padding: 13px; }
         .btn-copy:hover { background-color: #2471a3; }
         input[type="text"] { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; margin-bottom: 10px; }
         .trend-category { margin-top: 15px; font-weight: bold; color: #e74c3c; font-size: 14px; }
         .trend-item { padding: 8px; background: #f8f9fa; margin-bottom: 5px; border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 13px;}
         .trend-item:hover { background: #e9ecef; }
-        #result-box { border: 1px dashed #ccc; padding: 20px; min-height: 300px; margin-bottom: 15px; background: #fff; }
+
+        /* ✨ 네이버 블로그 실규격 클론 에디터 */
+        .editor-wrapper { background-color: #f4f4f4; padding: 20px; border-radius: 8px; margin-bottom: 12px; }
+        #naver-editor-body {
+            width: 100%;
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 50px 30px;
+            background-color: #ffffff;
+            min-height: 600px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            font-family: 'Nanum Gothic', sans-serif;
+            text-align: center;
+            line-height: 2.2;
+            color: #333;
+            outline: none;
+            word-break: keep-all;
+            font-size: 16px;
+        }
+        #naver-editor-body img {
+            max-width: 100%;
+            height: auto;
+            margin: 30px auto;
+            border-radius: 8px;
+            display: block;
+        }
+        .editor-title-area {
+            font-size: 26px;
+            font-weight: bold;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+            color: #1a1a1a;
+        }
+        .editor-placeholder { text-align: center; color: #aaa; margin-top: 150px; font-size: 15px; }
     </style>
 </head>
 <body>
@@ -33,9 +68,11 @@
             <input type="text" id="keyword-input" placeholder="키워드를 입력하세요 (예: 봄철 피부 관리법)">
             <button class="btn" style="background-color: #8e44ad; font-size: 16px; padding: 15px;" onclick="generateAll()">✨ 블로그 원고 + 고화질 썸네일 동시 생성</button>
             
-            <h2 style="margin-top: 30px;">🎨 네이버 클론 에디터</h2>
-            <div id="result-box">
-                <p style="text-align: center; color: #888; margin-top: 100px;">생성된 블로그 원고가 이곳에 표시됩니다.</p>
+            <h2 style="margin-top: 30px;">🎨 네이버 클론 에디터 <small style="font-size:12px; color:#888; font-weight:normal;">(700px 실규격)</small></h2>
+            <div class="editor-wrapper">
+                <div id="naver-editor-body" contenteditable="true">
+                    <div class="editor-placeholder">✨ 원고를 생성하면 이곳에<br>네이버 블로그 실규격으로 렌더링됩니다.</div>
+                </div>
             </div>
             <button class="btn btn-copy" onclick="copyRichText()">📋 네이버 서식 그대로 복사하기</button>
         </div>
@@ -78,10 +115,10 @@
             const kw = document.getElementById('keyword-input').value;
             if(!kw) return alert('키워드를 입력해주세요!');
             
-            const blogBox = document.getElementById('result-box');
+            const editor = document.getElementById('naver-editor-body');
             const imgBox = document.getElementById('storyboard-box');
             
-            blogBox.innerHTML = '<p style="text-align:center; font-size:16px; margin-top:100px;">⏳ <strong>AI 수석 작가 + Imagen 3 실사 엔진</strong>이 원고와 이미지를 동시 제작 중입니다...<br><small style="color:#888;">(약 20~40초 소요)</small></p>';
+            editor.innerHTML = '<div class="editor-placeholder">⏳ <strong>AI 수석 작가</strong>가 원고를 집필 중입니다...<br><small style="color:#aaa;">(약 20~40초 소요)</small></div>';
             imgBox.innerHTML = '<p style="text-align:center; color:#888; margin-top:60px;">원고 생성 완료 후 이미지가 여기에 표시됩니다.</p>';
             
             try {
@@ -93,32 +130,31 @@
                 const response = await res.json();
                 
                 if (response.status === 'success') {
-                    // 블로그 원고 렌더링
-                    blogBox.innerHTML = response.html;
+                    // 네이버 클론 에디터에 원고 렌더링
+                    editor.innerHTML = `<div class="editor-title-area">📝 ${response.title}</div>${response.html}`;
                     
-                    // 이미지 갤러리 렌더링 (원고 내 이미지가 이미 삽입되어 있으므로 갤러리는 제목만 표시)
-                    imgBox.innerHTML = `<div style="padding: 20px; text-align: center; background: #f8f9fa; border-radius: 8px;">
-                        <h3 style="color: #2c3e50;">✅ "${response.title}" 원고 생성 완료!</h3>
-                        <p style="color: #7f8c8d;">Imagen 3가 생성한 실사 이미지가 원고 본문 안에 삽입되었습니다.<br>위쪽 에디터에서 확인하시고 📋 복사 버튼을 눌러 네이버에 붙여넣기 하세요!</p>
+                    imgBox.innerHTML = `<div style="padding: 20px; text-align: center; background: #f0faf5; border-radius: 8px; border: 1px solid #03c75a;">
+                        <h3 style="color: #03c75a;">✅ 원고 + 이미지 생성 완료!</h3>
+                        <p style="color: #555;">이미지가 원고 내 삽입되었습니다.<br>📋 복사 버튼으로 네이버 블로그에 바로 붙여넣기 하세요!</p>
                     </div>`;
                 } else {
-                    blogBox.innerHTML = `<div style="color:red; text-align:center; margin-top:100px; padding:20px;">🚨 에러: ${response.message}</div>`;
+                    editor.innerHTML = `<div style="color:red; text-align:center; margin-top:100px; padding:20px;">🚨 에러: ${response.message}</div>`;
                     imgBox.innerHTML = '';
                 }
             } catch (err) {
-                blogBox.innerHTML = `<p style="color:red; text-align:center; margin-top:100px;">통신 에러 발생: ${err.message}</p>`;
+                editor.innerHTML = `<div style="color:red; text-align:center; margin-top:100px;">통신 에러 발생: ${err.message}</div>`;
             }
         }
 
         async function copyRichText() {
-            const box = document.getElementById('result-box');
-            if (box.innerText.includes('생성된 블로그 원고가 이곳에 표시됩니다')) return alert('먼저 원고를 생성해주세요!');
+            const editor = document.getElementById('naver-editor-body');
+            if (editor.innerText.includes('원고를 생성하면 이곳에')) return alert('먼저 원고를 생성해주세요!');
             try {
-                const html = box.innerHTML;
+                const html = editor.innerHTML;
                 const blob = new Blob([html], { type: 'text/html' });
                 const item = new ClipboardItem({ 'text/html': blob });
                 await navigator.clipboard.write([item]);
-                alert('✅ 복사 성공! 네이버 블로그에 가서 Ctrl+V 를 누르세요.');
+                alert('✅ 복사 성공! 네이버 블로그 스마트에디터에서 Ctrl+V 를 누르세요.');
             } catch (err) { alert('복사 실패. 브라우저 설정을 확인해주세요.'); }
         }
     </script>
