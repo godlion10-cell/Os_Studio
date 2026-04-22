@@ -1,271 +1,386 @@
 import os
 import json
-import re
 import time
-import requests
-import traceback
-from flask import Flask, request, jsonify, render_template_string, redirect
-import google.generativeai as genai
+import re
+import sys
+from datetime import datetime
+from flask import Flask, request, jsonify, render_template_string
+from google import genai
+from google.genai import types
 from dotenv import load_dotenv
 
-# 1. 시스템 설정
-load_dotenv()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+# 🛡️ 인코딩 방어
+if sys.stdout.encoding != 'utf-8':
+    try: sys.stdout.reconfigure(encoding='utf-8')
+    except: pass
 
-MODELS = ['gemini-1.5-pro', 'gemini-1.5-flash'] 
+load_dotenv()
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite']  # 검증된 모델만
 
 app = Flask(__name__)
+SAVE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'saved_content')
+os.makedirs(SAVE_DIR, exist_ok=True)
 
-# 이미지 저장소 확보
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-IMAGE_FOLDER = os.path.join(BASE_DIR, 'static', 'images')
-os.makedirs(IMAGE_FOLDER, exist_ok=True)
+HUMANIZER_PROTOCOL = """
+[CRITICAL: 안티-AI 감지 및 100% 휴머나이징 규칙]
+1. AI 금지어 절대 삭제: "결론적으로", "요약하자면", "이처럼", "중요한 것은", "기억하세요".
+2. 의도적 불완전함: 너무 완벽한 문어체를 쓰지 마라. "아니 진짜로,", "솔직히 말해서", "하아...", "~랄까?" 같은 인간의 구어체 추임새를 문단마다 1개씩 자연스럽게 섞을 것.
+3. 시청자 빙의: 가르치려 들지 말고, 멱살 잡고 끌고 가거나(도파민), 옆에 앉아 등을 토닥여라(옥시토신).
+4. 문장 호흡 파괴: 긴 문장 뒤에는 무조건 아주 짧은 단문을 배치하여 리듬감을 만든다.
+"""
 
-# ----------------------------------------------------------------
-# [FRONT-END] UI 대시보드
-# ----------------------------------------------------------------
+VISUAL_GUARDRAIL = """
+[CRITICAL: 영상 생성 8대 가드레일 강제 적용]
+비디오 프롬프트 작성 시 끝에 무조건 다음 문장을 영어로 붙일 것:
+"Lock temporal and spatial continuity. Unbroken single-take. Preserve cinematic film grain and precise textures. Strictly preserve all visible Hangul. Zero temporal flickering or AI plastic look."
+"""
+
+def get_previous_titles(max_count=10):
+    """이전 저장 원고 제목 수집 (중복 방지용)"""
+    titles = []
+    try:
+        for fname in sorted(os.listdir(SAVE_DIR), reverse=True)[:max_count]:
+            if not fname.endswith('.json'): continue
+            with open(os.path.join(SAVE_DIR, fname), 'r', encoding='utf-8') as f:
+                meta = json.load(f)
+            titles.append(meta.get('title', ''))
+    except: pass
+    return [t for t in titles if t]
+
+def clean_json_response(raw_text):
+    text = raw_text.strip()
+    if text.startswith('```json'):
+        text = text[7:]
+    elif text.startswith('```'):
+        text = text[3:]
+    if text.endswith('```'):
+        text = text[:-3]
+    return text.strip()
+
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>Os Studio v5.2 - Error Free Engine</title>
+    <title>Os Studio v15.1 - Real World Edition</title>
     <style>
-        body { margin: 0; display: flex; font-family: 'Nanum Gothic', sans-serif; background: #f0f2f5; height: 100vh; overflow: hidden; }
-        #sidebar { width: 280px; background: #fff; border-right: 1px solid #ddd; padding: 20px; overflow-y: auto; flex-shrink: 0; }
-        .trend-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; font-size: 14px; transition: 0.2s; }
-        .trend-item:hover { background: #f1f8e9; color: #2db400; font-weight:bold; }
-        #main-container { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-        #toolbar { background: #fff; padding: 15px; border-bottom: 1px solid #ddd; display: flex; justify-content: center; gap: 15px; align-items: center; }
-        #content-area { display: flex; flex: 1; overflow-y: auto; padding: 20px; gap: 20px; justify-content: center; }
-        #editor-canvas { width: 700px; background: #fff; padding: 50px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); min-height: 1200px; }
-        #title-display { font-size: 26px; font-weight: bold; text-align: center; margin-bottom: 30px; border-bottom: 2px solid #eee; padding-bottom: 15px; }
-        #editor-body { font-size: 17px; line-height: 2.2; text-align: center; outline: none; color: #333; }
-        img { max-width: 100%; border-radius: 12px; margin: 30px 0; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
-        .cliffhanger { background:#111; color:#fff; padding:20px; border-radius:10px; margin-top:40px; text-align:center; font-weight:bold; }
-        .cpa-banner { background: linear-gradient(135deg, #ff416c, #ff4b2b); color: white; padding: 20px; border-radius: 10px; text-align: center; margin-top: 20px; cursor: pointer; animation: pulse 2s infinite; text-decoration: none; display: block; }
-        @keyframes pulse { 0% {box-shadow: 0 0 0 0 rgba(255, 65, 108, 0.7);} 70% {box-shadow: 0 0 0 15px rgba(255, 65, 108, 0);} 100% {box-shadow: 0 0 0 0 rgba(255, 65, 108, 0);} }
-        #right-panel { width: 380px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
-        .info-card { background: #fff; padding: 20px; border-radius: 12px; border: 1px solid #ddd; font-size: 14px; }
-        .card-title { font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; color: #333; }
-        pre { white-space: pre-wrap; background: #f9f9f9; padding: 10px; border-radius: 5px; font-size: 12px; line-height: 1.6; }
-        #loading-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1000; color: #fff; flex-direction: column; justify-content: center; align-items: center; }
+        :root { --bg: #09090b; --panel: #18181b; --text: #e4e4e7; --accent: #3b82f6; --dopamine: #ef4444; --oxytocin: #10b981; }
+        body { margin: 0; display: flex; font-family: sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; }
+        #sidebar { width: 300px; background: var(--panel); border-right: 1px solid #27272a; padding: 20px; overflow-y: auto; }
+        .history-item { padding: 12px; margin-bottom: 8px; background: #27272a; border-radius: 8px; font-size: 13px; cursor: pointer; color: #a1a1aa; transition: 0.2s; }
+        .history-item:hover { background: #3f3f46; color: white; }
+        .history-actions { display: flex; gap: 6px; margin-top: 6px; }
+        .history-actions button { padding: 3px 8px; font-size: 11px; border-radius: 4px; }
+        #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        #toolbar { padding: 20px; background: var(--panel); border-bottom: 1px solid #27272a; display: flex; gap: 15px; justify-content: center; align-items: center; }
+        input { padding: 12px; width: 400px; border-radius: 8px; border: 1px solid #3f3f46; background: #27272a; color: white; outline: none; font-size: 15px; }
+        button { padding: 12px 24px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; color: white; transition: 0.2s; }
+        .btn-dopamine { background: var(--dopamine); }
+        .btn-dopamine:hover { background: #dc2626; transform: translateY(-1px); }
+        .btn-oxytocin { background: var(--oxytocin); }
+        .btn-oxytocin:hover { background: #059669; transform: translateY(-1px); }
+        .btn-naver { background: #2db400; font-size: 11px; padding: 4px 10px; }
+        #content { padding: 30px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; align-items: center; gap: 20px; }
+        .card { background: var(--panel); padding: 30px; border-radius: 12px; width: 100%; max-width: 900px; border: 1px solid #27272a; }
+        .badge { display: inline-block; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; margin-bottom: 15px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
+        th, td { border: 1px solid #3f3f46; padding: 12px; text-align: left; }
+        th { background: #27272a; color: var(--accent); }
+        pre { white-space: pre-wrap; line-height: 1.8; font-size: 15px; color: #d4d4d8; }
+        #loading { display: none; position: fixed; inset: 0; background: rgba(9,9,11,0.95); z-index: 1000; justify-content: center; align-items: center; flex-direction: column; }
+        .series-label { display: flex; align-items: center; gap: 8px; color: #a1a1aa; font-size: 13px; cursor: pointer; }
+        .series-label input { width: 18px; height: 18px; accent-color: var(--accent); }
+        .toast { position: fixed; bottom: 30px; right: 30px; background: #2db400; color: white; padding: 14px 24px; border-radius: 10px; font-weight: bold; z-index: 2000; animation: fadeInOut 2.5s ease-in-out; }
+        @keyframes fadeInOut { 0% { opacity:0; transform:translateY(20px); } 15% { opacity:1; transform:translateY(0); } 85% { opacity:1; } 100% { opacity:0; } }
     </style>
 </head>
 <body>
-    <div id="loading-overlay">
-        <h1 style="color: #2db400;">🔥 Os 엔진 풀가동 중...</h1>
-        <p>A급 원고, 쇼츠 대본, 이미지, 수익 펀넬을 동시 추출 중입니다.</p>
+    <div id="loading">
+        <h2 style="color: var(--accent);">엔진 구동 중...</h2>
+        <p style="color: #71717a;">인간의 뇌 구조에 맞는 대본을 조립하고 있습니다.</p>
     </div>
 
     <div id="sidebar">
-        <h2 style="color: #2db400;">Os Radar 📡</h2>
-        <div id="search-trends">트렌드 로딩 중...</div><hr>
-        <div id="home-trends"></div>
+        <h3 style="color: var(--accent); margin-top: 0;">저장된 기록</h3>
+        <button onclick="loadHistoryList()" style="width: 100%; background: #3f3f46; margin-bottom: 15px; font-size: 13px;">새로고침</button>
+        <div id="history-list"></div>
     </div>
 
-    <div id="main-container">
+    <div id="main">
         <div id="toolbar">
-            <select id="mode-select" style="padding: 10px; border-radius: 5px;">
-                <option value="naver">Naver (감성/반자동)</option>
-                <option value="blogspot">Blogspot (구글/자동)</option>
-            </select>
-            <input type="text" id="target-keyword" placeholder="키워드 입력" style="width: 300px; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
-            <button onclick="generateAll()" style="background: #2db400; color: white; border: none; padding: 12px 25px; border-radius: 5px; cursor: pointer; font-weight: bold;">💎 통합 수익화 생성</button>
+            <input type="text" id="keyword" placeholder="키워드 입력 (예: 이직, 주식, 고양이)">
+            <label class="series-label">
+                <input type="checkbox" id="series-mode"> 시리즈 모드
+            </label>
+            <button class="btn-dopamine" onclick="generate('DOPAMINE')">뉴로-해커 모드</button>
+            <button class="btn-oxytocin" onclick="generate('OXYTOCIN')">힐링 ASMR 모드</button>
         </div>
-
-        <div id="content-area">
-            <div id="editor-canvas">
-                <div id="title-display">제목</div>
-                <div id="editor-body" contenteditable="true">원고가 여기에 생성됩니다.</div>
-                <div id="funnel-area"></div>
-            </div>
-
-            <div id="right-panel">
-                <div class="info-card" style="background: #e3f2fd;">
-                    <div class="card-title">📈 수익 예측 리포트</div>
-                    <div id="stats-info">대기 중...</div>
-                </div>
-                <div class="info-card">
-                    <div class="card-title">📱 쇼츠/릴스 대본</div>
-                    <pre id="shorts-display"></pre>
-                </div>
-                <div class="info-card" style="background: #f3e5f5;">
-                    <div class="card-title">🔥 알고리즘 팩 (해시태그 & 캡션)</div>
-                    <div id="seo-tags" style="font-weight:bold; color:#8e24aa;"></div>
-                    <pre id="insta-caption" style="margin-top:10px;"></pre>
-                </div>
-                <div class="info-card">
-                    <div class="card-title">🎥 CF급 영상 프롬프트</div>
-                    <div id="image-prompts-display" style="font-size: 11px;"></div>
-                </div>
+        
+        <div id="content">
+            <div class="card" id="output-area" style="display: none;">
+                <span class="badge" id="mode-badge"></span>
+                <h2 id="out-title" style="margin-top:0;"></h2>
+                <div style="color: #a1a1aa; margin-bottom: 20px;">페르소나: <span id="out-persona" style="color: #fbbf24;"></span></div>
+                
+                <h3 style="color: var(--accent); border-bottom: 1px solid #3f3f46; padding-bottom: 10px;">대본</h3>
+                <pre id="out-script"></pre>
+                
+                <h3 style="color: var(--accent); border-bottom: 1px solid #3f3f46; padding-bottom: 10px; margin-top: 40px;">시각화 설계도</h3>
+                <div id="out-table"></div>
             </div>
         </div>
     </div>
 
     <script>
-        async function loadTrends() {
-            try {
-                const res = await fetch('/api/trends');
-                const data = await res.json();
-                document.getElementById('search-trends').innerHTML = '<h4>🔍 검색용</h4>' + data.search_trends.map(t => `<div class="trend-item" onclick="setKeyword('${t}')">${t}</div>`).join('');
-                document.getElementById('home-trends').innerHTML = '<h4>🏠 홈판용</h4>' + data.home_trends.map(t => `<div class="trend-item" onclick="setKeyword('${t}')">${t}</div>`).join('');
-            } catch(e) { document.getElementById('search-trends').innerText = "로딩 에러 (새로고침 요망)"; }
+        function showToast(msg) {
+            const t = document.createElement('div');
+            t.className = 'toast';
+            t.innerText = msg;
+            document.body.appendChild(t);
+            setTimeout(() => t.remove(), 2600);
         }
-        function setKeyword(k) { document.getElementById('target-keyword').value = k; }
 
-        async function generateAll() {
-            const kw = document.getElementById('target-keyword').value;
-            const mode = document.getElementById('mode-select').value;
-            if(!kw) return alert("키워드를 입력해주세요.");
-
-            document.getElementById('loading-overlay').style.display = 'flex';
+        function renderOutput(data, mode) {
+            document.getElementById('output-area').style.display = 'block';
+            const badge = document.getElementById('mode-badge');
             
+            if(mode === 'DOPAMINE') {
+                badge.innerText = 'DOPAMINE MODE';
+                badge.style.background = 'var(--dopamine)';
+            } else if(mode === 'OXYTOCIN') {
+                badge.innerText = 'OXYTOCIN MODE';
+                badge.style.background = 'var(--oxytocin)';
+            } else {
+                badge.innerText = 'LOADED';
+                badge.style.background = 'var(--accent)';
+            }
+            
+            document.getElementById('out-title').innerText = data.title || '';
+            document.getElementById('out-persona').innerText = data.persona || '';
+            document.getElementById('out-script').innerText = typeof data.script === 'string' ? data.script : JSON.stringify(data.script, null, 2);
+            
+            const prompts = data.prompts || [];
+            let tableHTML = '<table><tr><th>컷</th><th>나레이션/대사</th><th>이미지 프롬프트</th><th>비디오 프롬프트</th></tr>';
+            prompts.forEach(p => {
+                tableHTML += `<tr><td>${p.cut||''}</td><td>${p.text||''}</td><td>${p.img||''}</td><td>${p.vid||''}</td></tr>`;
+            });
+            tableHTML += '</table>';
+            document.getElementById('out-table').innerHTML = tableHTML;
+            
+            document.getElementById('content').scrollTo(0, 0);
+        }
+
+        async function generate(mode) {
+            const kw = document.getElementById('keyword').value;
+            const isSeries = document.getElementById('series-mode').checked;
+            if(!kw) return alert('키워드를 입력하세요.');
+            
+            document.getElementById('loading').style.display = 'flex';
+            document.getElementById('output-area').style.display = 'none';
+
             try {
-                const res = await fetch('/api/generate-full', {
+                const res = await fetch('/api/generate', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ keyword: kw, mode: mode })
+                    body: JSON.stringify({ keyword: kw, mode: mode, series_mode: isSeries })
                 });
-                const data = await res.json();
-
-                if(data.status === "success") {
-                    document.getElementById('title-display').innerText = data.title;
-                    document.getElementById('editor-body').innerHTML = data.html;
-                    
-                    document.getElementById('funnel-area').innerHTML = `
-                        <div class="cliffhanger">🔒 [비공개] ${data.cliffhanger}</div>
-                        <a href="${data.cloaked_cpa_link}" target="_blank" class="cpa-banner">
-                            <h3>🚨 [마감임박] ${data.cpa_banner}</h3>
-                        </a>`;
-
-                    const views = data.stats && data.stats.views ? data.stats.views.toLocaleString() : 0;
-                    const rev = data.stats && data.stats.revenue ? data.stats.revenue.toLocaleString() : 0;
-                    
-                    document.getElementById('stats-info').innerHTML = `✅ 예상 조회수: <strong>${views}회</strong><br>💰 예상 수익: <strong>${rev}원</strong>`;
-                    document.getElementById('shorts-display').innerText = data.shorts_script || '대본 생성 실패';
-                    document.getElementById('seo-tags').innerText = (data.seo_tags || []).join(' ');
-                    document.getElementById('insta-caption').innerText = data.insta_caption || '';
-                    document.getElementById('image-prompts-display').innerHTML = (data.img_prompts || []).map(p => `<p>🎬 ${p}</p>`).join('');
-
-                    document.querySelectorAll('#editor-body img').forEach(img => img.src = img.src + "?v=" + Date.now());
-                } else { alert("에러: " + data.message); }
-            } catch(e) { alert("서버 통신 실패: 파이썬 서버가 실행 중인지 확인하세요."); }
-            finally { document.getElementById('loading-overlay').style.display = 'none'; }
+                const result = await res.json();
+                
+                if(result.status === 'success') {
+                    renderOutput(result.data, mode);
+                    loadHistoryList();
+                    showToast('생성 + 자동 저장 완료');
+                } else {
+                    alert('생성 실패: ' + result.message);
+                }
+            } catch(e) {
+                alert('통신 오류: ' + e.message);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
         }
-        window.onload = loadTrends;
+
+        async function loadHistoryList() {
+            try {
+                const res = await fetch('/api/history');
+                const files = await res.json();
+                const list = document.getElementById('history-list');
+                list.innerHTML = files.map(f => `
+                    <div class="history-item">
+                        <div onclick="loadSingleHistory('${f.filename}')" style="cursor:pointer;">${f.display}</div>
+                        <div class="history-actions">
+                            <button class="btn-naver" onclick="event.stopPropagation(); copyNaverFormat('${f.filename}')">네이버 복사</button>
+                        </div>
+                    </div>`
+                ).join('');
+            } catch(e) {}
+        }
+
+        async function loadSingleHistory(filename) {
+            try {
+                const res = await fetch(`/api/history/${filename}`);
+                const result = await res.json();
+                if(result.status === 'success') {
+                    renderOutput(result.data, 'LOADED');
+                }
+            } catch(e) {
+                alert('파일을 불러오지 못했습니다.');
+            }
+        }
+
+        async function copyNaverFormat(filename) {
+            try {
+                const res = await fetch(`/api/naver-format/${filename}`);
+                const data = await res.json();
+                if(data.error) { alert(data.error); return; }
+                await navigator.clipboard.writeText(data.naver_html);
+                showToast('네이버 블로그 양식 복사 완료!');
+            } catch(e) { alert('복사 실패: ' + e.message); }
+        }
+
+        window.onload = loadHistoryList;
     </script>
 </body>
 </html>
 """
 
-# ----------------------------------------------------------------
-# [BACK-END] API 라우터 (강철 방어막 적용)
-# ----------------------------------------------------------------
-
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
 
-@app.route('/api/trends')
-def get_trends():
+@app.route('/api/history')
+def get_history():
+    files = []
+    for fname in sorted(os.listdir(SAVE_DIR), reverse=True):
+        if not fname.endswith('.json'): continue
+        try:
+            with open(os.path.join(SAVE_DIR, fname), 'r', encoding='utf-8') as f:
+                meta = json.load(f)
+            display = meta.get('title', fname)[:40]
+            files.append({"filename": fname, "display": display})
+        except:
+            files.append({"filename": fname, "display": fname})
+    return jsonify(files)
+
+@app.route('/api/history/<filename>')
+def get_single_history(filename):
+    filepath = os.path.join(SAVE_DIR, os.path.basename(filename))
+    if os.path.exists(filepath):
+        with open(filepath, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return jsonify({"status": "success", "data": data})
+    return jsonify({"status": "error", "message": "파일 없음"})
+
+@app.route('/api/naver-format/<filename>')
+def naver_format(filename):
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        res = model.generate_content(
-            "대한민국 핫트렌드 20개를 검색용 10개, 홈판용 10개로 나누어 반환해. 필수 JSON 키: search_trends, home_trends",
-            generation_config={"response_mime_type": "application/json"}
-        )
-        return jsonify(json.loads(res.text))
+        filepath = os.path.join(SAVE_DIR, os.path.basename(filename))
+        if not os.path.exists(filepath):
+            return jsonify({"error": "파일 없음"}), 404
+        with open(filepath, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        title = data.get('title', '')
+        script = data.get('script', '')
+        persona = data.get('persona', '')
+        # 대본을 네이버 블로그 HTML로 변환
+        paragraphs = [p.strip() for p in script.split('\\n') if p.strip()]
+        if not paragraphs:
+            paragraphs = [p.strip() for p in script.split('\n') if p.strip()]
+        body_html = ''.join([f'<p style="font-size:16px; line-height:2.0; margin-bottom:20px;">{p}</p>' for p in paragraphs])
+        naver_html = f"""<div style="text-align:center; font-family:'Nanum Gothic',sans-serif; color:#333;">
+<h2 style="font-size:24px; font-weight:bold; margin-bottom:30px; line-height:1.6;">{title}</h2>
+<p style="color:#888; font-size:14px; margin-bottom:40px;">{persona}</p>
+{body_html}
+</div>"""
+        return jsonify({"naver_html": naver_html, "title": title})
     except Exception as e:
-        print(f"[ERROR] 트렌드 에러: {e}")
-        return jsonify({"search_trends": ["트렌드 1", "트렌드 2"], "home_trends": ["홈 1", "홈 2"]})
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/go')
-def redirect_cpa():
-    target = request.args.get('target', 'https://www.coupang.com')
-    return redirect(target)
+@app.route('/api/generate', methods=['POST'])
+def generate():
+    req = request.get_json()
+    keyword = req.get('keyword', '')
+    mode = req.get('mode', 'DOPAMINE')
+    series_mode = req.get('series_mode', False)
 
-@app.route('/api/generate-full', methods=['POST'])
-def generate_full():
-    data = request.get_json()
-    keyword = data.get('keyword', '테스트')
-    mode = data.get('mode', 'naver')
+    # 📚 이전 원고 중복 방지 / 시리즈 연결
+    prev_titles = get_previous_titles()
+    prev_section = ""
+    if prev_titles:
+        title_list = "\n".join([f"  - {t}" for t in prev_titles])
+        if series_mode:
+            prev_section = f"""
+    [시리즈 모드 ON]
+    아래는 이전에 생성한 콘텐츠 제목 목록이다. 이 글들의 **후속편/시리즈**로 작성하라.
+    - 이전 글과 자연스럽게 이어지는 스토리라인.
+    - 제목에 시리즈 넘버링 혹은 '후편', '그 후' 등 표시.
+    [이전 글 목록]
+{title_list}
+"""
+        else:
+            prev_section = f"""
+    [중복 방지]
+    아래 제목들과 **완전히 다른 각도/관점/소재**로 작성하라. 같은 내용 반복 금지.
+    [이전 글 목록]
+{title_list}
+"""
 
-    prompt = f"""
-    당신은 A급 마케터이자 CF 영상 감독입니다.
-    주제: '{keyword}'
-    [작성 규칙]
-    1. html: {'네이버 감성, 가운데 정렬' if mode=='naver' else '구글 SEO, 좌측 정렬'}. 본문 중간에 '환급', '대출', '지원금' 등 고단가 키워드로 문맥을 전환. [IMG_1], [IMG_2] 포함.
-    2. shorts_script: 60초 분량, 시각/청각 지시문 포함.
-    3. cliffhanger & cpa_banner: 독자를 미치게 만드는 카피라이팅 적용.
-    4. stats: 조회수(views)와 고단가 수익(revenue) 예측.
-    5. img_prompts: 영어로 작성된 CF 수준의 세로형 실사 프롬프트 2개.
-    6. seo_tags & insta_caption: 인스타 DM 유도 멘트 포함.
-    반드시 JSON 형식 필수 키: title, html, shorts_script, cliffhanger, cpa_banner, stats, seo_tags, insta_caption, img_prompts
+    if mode == 'DOPAMINE':
+        mode_instruction = "[DOPAMINE 모드: 뇌과학 해커 & 팩트 폭행]\n- 츤데레 코치 빙의. 단정형 화법.\n- IT/게임 비유, 조선왕조실록 인용으로 권위 세우기.\n- 비주얼: 하이퍼리얼리티 또는 다크 다큐멘터리."
+    else:
+        mode_instruction = "[OXYTOCIN 모드: 클레이 ASMR 힐링]\n- 지친 마음을 다독이는 따뜻한 치유자.\n- 평화로운 미니어처 공방 서사.\n- 비주얼: 폴리머 클레이, 쫀득한 질감, 텅스텐 조명."
+
+    master_prompt = f"""
+    당신은 콘텐츠 디렉터입니다. 주제 키워드: '{keyword}'
+    
+    {mode_instruction}
+    {prev_section}
+    {HUMANIZER_PROTOCOL}
+    {VISUAL_GUARDRAIL}
+
+    아래의 JSON 형식으로만 정확히 출력하세요. (마크다운 백틱 금지, 순수 JSON만)
+    {{
+        "title": "클릭을 유도하는 훅 제목",
+        "persona": "구체적인 타겟 페르소나",
+        "script": "구어체 대본 (최소 800자 이상)",
+        "prompts": [
+            {{"cut": "1", "text": "대사", "img": "이미지 프롬프트 (영어)", "vid": "비디오 프롬프트 (영어)"}}
+        ]
+    }}
     """
 
     content = None
-    for model_name in MODELS:
+    for m_id in MODELS:
         try:
-            model = genai.GenerativeModel(model_name)
-            res = model.generate_content(
-                prompt,
-                generation_config={"response_mime_type": "application/json"}
+            res = client.models.generate_content(
+                model=m_id, 
+                contents=master_prompt,
+                config=types.GenerateContentConfig(temperature=0.8)
             )
-            content = json.loads(res.text)
+            clean_text = clean_json_response(res.text)
+            content = json.loads(clean_text)
             break
         except Exception as e:
-            print(f"[ERROR] {model_name} 엔진 실패: {e}")
+            print(f"[{m_id}] Error: {e}")
             continue
 
     if not content:
-        return jsonify({"status": "error", "message": "구글 AI 응답 에러. 다시 시도해주세요."}), 500
+        return jsonify({"status": "error", "message": "AI 생성 중 오류가 발생했습니다. 다시 시도해주세요."})
 
     try:
-        final_html = content.get('html', '<p>본문 생성 실패</p>')
-
-        if mode == 'naver':
-            for k, v in {"요약하자면": "솔직히 정리해보면", "결론적으로": "아무튼 팩트는", "중요합니다": "진짜 중요해요!"}.items():
-                final_html = final_html.replace(k, v)
-
-        generated_images = []
-        for i, img_p in enumerate(content.get('img_prompts', [])):
-            filename = f"os_v52_{int(time.time())}_{i}.jpg"
-            save_path = os.path.join(IMAGE_FOLDER, filename)
-            url = f"https://pollinations.ai/p/{requests.utils.quote(img_p)}?width=768&height=1024&model=flux&nologo=true"
+        safe_kw = re.sub(r'\W+', '_', keyword)[:15]
+        timestamp = datetime.now().strftime("%y%m%d_%H%M%S")
+        filename = f"{safe_kw}_{timestamp}.json"
+        
+        filepath = os.path.join(SAVE_DIR, filename)
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(content, f, ensure_ascii=False, indent=4)
+        print(f"[SAVED] {filename}")
             
-            try:
-                img_r = requests.get(url, timeout=30)
-                if img_r.status_code == 200 and 'image' in img_r.headers.get('Content-Type', ''):
-                    with open(save_path, 'wb') as f:
-                        f.write(img_r.content)
-                    generated_images.append(f"/static/images/{filename}")
-                else: raise Exception("Not an image")
-            except:
-                generated_images.append(f'<div style="background:#fff3e0; padding:30px; border:2px dashed #ffb74d; border-radius:10px; color:#e65100; margin:30px 0; text-align:center;">🎁 [한정특가] {keyword} 관련 시크릿 혜택 확인하기</div>')
-
-        for i, img_data in enumerate(generated_images):
-            tag = f'<img src="{img_data}">' if img_data.startswith('/static') else img_data
-            final_html = final_html.replace(f"[IMG_{i+1}]", tag)
-
-        cloaked_link = f"/go?target=https://link.coupang.com/a/YOUR_ID"
-
-        return jsonify({
-            "status": "success",
-            "title": content.get('title', '제목 없음'),
-            "html": final_html,
-            "cliffhanger": content.get('cliffhanger', '다음 글에서 뵙겠습니다.'),
-            "cpa_banner": content.get('cpa_banner', '클릭해서 확인하세요!'),
-            "shorts_script": content.get('shorts_script', '대본 생성 실패'),
-            "stats": content.get('stats', {"views": 0, "revenue": 0}),
-            "seo_tags": content.get('seo_tags', []),
-            "insta_caption": content.get('insta_caption', ''),
-            "img_prompts": content.get('img_prompts', []),
-            "cloaked_cpa_link": cloaked_link
-        })
+        return jsonify({"status": "success", "data": content})
     except Exception as e:
-        print(f"[ERROR] 조립 중 에러: {traceback.format_exc()}")
-        return jsonify({"status": "error", "message": "데이터 조립 실패. 터미널 로그를 확인하세요."}), 500
+        return jsonify({"status": "error", "message": str(e)})
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
