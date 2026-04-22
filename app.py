@@ -1,4 +1,4 @@
-import os, json, re, sys, urllib.parse, uuid
+import os, json, re, sys, urllib.parse, uuid, random
 from datetime import datetime
 from flask import Flask, request, jsonify, render_template_string
 from google import genai
@@ -282,11 +282,13 @@ def one_click_execute():
     meta.scan(); rf=meta.reinforce()
 
     def process_agent(mode):
+        # AI 검열 회피 및 정확한 출력 양식 지시
         prompt = f"""
-        주제: '{kw}', 모드: '{mode}'. 
-        1. [작가]: 본문 중간중간 [📷 이미지 1], [📷 이미지 2] 형태로 2개의 사진 들어갈 자리를 표시할 것.
+        주제: '{kw}', 작성 모드: '{mode}'. 
+        1. [작가]: 블로그 본문을 작성하되, 안전 가이드라인을 준수하여 작성할 것. 
+        본문 중간중간 사진이 들어갈 자리에 오직 텍스트로만 '[📷 이미지 1 위치]', '[📷 이미지 2 위치]' 라고 표시할 것. (절대 HTML <img> 태그나 마크다운 링크를 사용하지 말 것!)
         2. [이미지팀장]: 본문 내용에 맞는 실사 사진 프롬프트를 영문으로 2개 작성할 것.
-        ★ 무조건 이 문구를 프롬프트 끝에 붙일 것: ", hyper-realistic, 8k resolution, raw photo, detailed, shot on DSLR, NO DRAWING, NO SKETCH"
+        ★ 프롬프트 끝에 반드시 추가: ", hyper-realistic, 8k resolution, raw photo, detailed, shot on DSLR, NO DRAWING, NO SKETCH"
         
         JSON: {{
             "title": "제목",
@@ -296,24 +298,22 @@ def one_click_execute():
         """
         
         try:
-            # AI에게 데이터 요청
             res = client.models.generate_content(model=TEXT_MODELS[0], contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
             
-            # [핵심 방어막] AI가 불필요한 마크다운(```json)을 붙여도 강제로 뜯어냅니다.
             raw_text = res.text.strip()
             if raw_text.startswith("```json"):
                 raw_text = raw_text[7:]
             if raw_text.endswith("```"):
                 raw_text = raw_text[:-3]
-            raw_text = raw_text.strip()
+            data = json.loads(raw_text.strip())
             
-            data = json.loads(raw_text)
-            
-            # 엔진에 직접 프롬프트를 쏴서 이미지 URL 생성
+            # 엔진에 직접 프롬프트를 쏴서 이미지 URL 생성 (버그 수정 완료)
             image_urls = []
             for eng_prompt in data.get('prompts', []):
                 encoded_prompt = urllib.parse.quote(eng_prompt)
-                direct_image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true&seed={uuid.uuid4().int}"
+                # 너무 큰 숫자 대신, 정상적인 범위의 난수로 시드값 생성
+                safe_seed = random.randint(1, 999999)
+                direct_image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true&seed={safe_seed}"
                 image_urls.append(direct_image_url)
                 
             return {
@@ -323,12 +323,11 @@ def one_click_execute():
             }
             
         except Exception as e:
-            # 에러가 나더라도 시스템이 멈추지 않고 '비상용 데이터'를 보냅니다.
             print(f"[{mode} 모드 에러 발생]: {e}")
             return {
-                "title": f"⚠️ {mode} 모드 생성 지연",
-                "script": "AI 서버와의 연결이 지연되었습니다. 레이더에서 주제를 다시 한번 클릭해 주세요.",
-                "generated_images": ["https://image.pollinations.ai/prompt/error?width=1024&height=1024&nologo=true"]
+                "title": f"⚠️ {mode} 모드 일시적 생성 지연",
+                "script": "AI 서버와의 연결이 지연되었거나, 주제가 안전 필터에 걸렸습니다. 다른 키워드를 클릭하거나 다시 시도해 주세요.",
+                "generated_images": []
             }
 
     hacker=process_agent("해커")

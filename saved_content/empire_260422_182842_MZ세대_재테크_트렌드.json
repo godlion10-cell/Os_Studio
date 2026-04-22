@@ -1,0 +1,17 @@
+{
+    "keyword": "MZ세대 재테크 트렌드",
+    "hacker": {
+        "title": "⚠️ 해커 모드 생성 지연",
+        "script": "AI 서버와의 연결이 지연되었습니다. 레이더에서 주제를 다시 한번 클릭해 주세요.",
+        "generated_images": [
+            "https://image.pollinations.ai/prompt/error?width=1024&height=1024&nologo=true"
+        ]
+    },
+    "healer": {
+        "title": "⚠️ 힐링 모드 생성 지연",
+        "script": "AI 서버와의 연결이 지연되었습니다. 레이더에서 주제를 다시 한번 클릭해 주세요.",
+        "generated_images": [
+            "https://image.pollinations.ai/prompt/error?width=1024&height=1024&nologo=true"
+        ]
+    }
+}
