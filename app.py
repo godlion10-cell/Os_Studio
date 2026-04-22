@@ -109,6 +109,15 @@ HTML_TEMPLATE = r"""
         #loading{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:1000;justify-content:center;align-items:center;flex-direction:column;color:#fff}
         .toast{position:fixed;bottom:30px;right:30px;background:var(--naver);color:#fff;padding:14px 24px;border-radius:10px;font-weight:bold;z-index:2000;animation:fi 2.5s}
         @keyframes fi{0%{opacity:0;transform:translateY(20px)}15%{opacity:1;transform:translateY(0)}85%{opacity:1}100%{opacity:0}}
+        .ftab-row{display:flex;gap:3px;margin-bottom:8px}
+        .ftab{flex:1;padding:6px 2px;font-size:10px;background:#2c3e50;color:#888;border:none;cursor:pointer;border-radius:3px;transition:0.2s}
+        .ftab.active{background:var(--naver);color:#fff;font-weight:bold}
+        .ftab:hover:not(.active){background:#3a3a3a;color:#ccc}
+        .fbox{display:none;width:100%;height:80px;padding:8px;box-sizing:border-box;background:#222;border:1px solid #444;border-radius:4px;color:#ddd;font-size:11px;font-family:monospace;resize:none}
+        .fbox.active{display:block}
+        .mega-btn{width:100%;padding:10px;background:linear-gradient(135deg,#ff4d4d,#f59e0b);color:#fff;font-size:13px;font-weight:bold;border:none;border-radius:5px;cursor:pointer;margin-top:8px;transition:0.2s}
+        .mega-btn:hover{transform:scale(1.02);opacity:0.9}
+        .flog{margin-top:6px;font-size:10px;color:#666;height:50px;overflow-y:auto;background:#111;padding:5px;border-radius:3px;font-family:monospace}
     </style>
 </head>
 <body>
@@ -116,8 +125,23 @@ HTML_TEMPLATE = r"""
 <div id="sidebar">
     <div class="sidebar-section"><span class="radar-title">🔍 검색 유입형 (안정 트래픽)</span><div id="search-radar">레이더 가동 중...</div></div>
     <div class="sidebar-section"><span class="radar-title" style="color:#f43f5e">✨ 홈판 알고리즘형 (도파민)</span><div id="home-radar">레이더 가동 중...</div></div>
-    <div class="sidebar-section" style="flex:1"><span class="radar-title" style="color:#a1a1aa">💾 기록소</span><div id="history-list">없음</div>
-        <button onclick="deleteAllHist()" style="width:100%;margin-top:10px;padding:5px;background:#444;border:none;color:#fff;border-radius:3px;cursor:pointer">전체 삭제</button></div>
+    <div class="sidebar-section"><span class="radar-title" style="color:#a1a1aa">💾 기록소</span><div id="history-list">없음</div>
+        <button onclick="deleteAllHist()" style="width:100%;margin-top:6px;padding:4px;background:#444;border:none;color:#fff;border-radius:3px;cursor:pointer;font-size:11px">전체 삭제</button></div>
+    <div class="sidebar-section" style="flex:1">
+        <span class="radar-title" style="color:#f59e0b">🏭 4대 미디어 팩토리</span>
+        <div class="ftab-row">
+            <button class="ftab active" onclick="switchFactory(this,'img-p')">📷 구글</button>
+            <button class="ftab" onclick="switchFactory(this,'vid-p')">🎬 Luma</button>
+            <button class="ftab" onclick="switchFactory(this,'bgm-p')">🎵 Suno</button>
+            <button class="ftab" onclick="switchFactory(this,'tts-p')">🗣️ Eleven</button>
+        </div>
+        <textarea id="img-p" class="fbox active" placeholder="Imagen 3 발주서 붙여넣기"></textarea>
+        <textarea id="vid-p" class="fbox" placeholder="Luma Dream Machine 발주서"></textarea>
+        <textarea id="bgm-p" class="fbox" placeholder="Suno AI 음악 발주서"></textarea>
+        <textarea id="tts-p" class="fbox" placeholder="ElevenLabs 성우 발주서"></textarea>
+        <button class="mega-btn" onclick="megaFactory()">🚀 전 공장 동시 가동</button>
+        <div class="flog" id="flog">시스템 대기 중...</div>
+    </div>
 </div>
 <div id="main">
     <div id="toolbar">
@@ -148,6 +172,9 @@ HTML_TEMPLATE = r"""
 </div>
 <script>
 function showToast(m){const t=document.createElement('div');t.className='toast';t.innerText=m;document.body.appendChild(t);setTimeout(()=>t.remove(),2600)}
+function switchFactory(btn,id){document.querySelectorAll('.ftab').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.fbox').forEach(b=>b.classList.remove('active'));btn.classList.add('active');document.getElementById(id).classList.add('active')}
+function flog(m){const l=document.getElementById('flog');const ts=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});l.innerHTML+=`<div>[${ts}] ${m}</div>`;l.scrollTop=l.scrollHeight}
+function megaFactory(){const img=document.getElementById('img-p').value.split('\n').filter(l=>l.trim());const vid=document.getElementById('vid-p').value.split('\n').filter(l=>l.trim());const bgm=document.getElementById('bgm-p').value.split('\n').filter(l=>l.trim());const tts=document.getElementById('tts-p').value.split('\n').filter(l=>l.trim());const total=img.length+vid.length+bgm.length+tts.length;if(!total){flog('❌ 모든 발주서 비어있음');return}flog(`🚀 전 공장 가동: ${total}건`);if(img.length){window.open('https://labs.google/fx/tools/image-fx','_blank');flog(`📷 Imagen: ${img.length}장`)}if(vid.length){window.open('https://lumalabs.ai/dream-machine','_blank');flog(`🎬 Luma: ${vid.length}편`)}if(bgm.length){window.open('https://suno.com/create','_blank');flog(`🎵 Suno: ${bgm.length}곡`)}if(tts.length){window.open('https://elevenlabs.io','_blank');flog(`🗣️ Eleven: ${tts.length}건`)}showToast(`${total}건 공장 가동!`)}
 async function loadRadar(){try{const r=await fetch('/api/radar');const d=await r.json();const sA=Array.isArray(d.search)?d.search:Object.values(d.search||{});const hA=Array.isArray(d.home)?d.home:Object.values(d.home||{});
 document.getElementById('search-radar').innerHTML=sA.map(k=>{const s=String(k).replace(/'/g,"\\'");return`<div class="chip search" onclick="runOneClick('${s}')"># ${k}</div>`}).join('');
 document.getElementById('home-radar').innerHTML=hA.map(k=>{const s=String(k).replace(/'/g,"\\'");return`<div class="chip home" onclick="runOneClick('${s}')"># ${k}</div>`}).join('')}catch(e){document.getElementById('search-radar').innerText='새로고침'}}
@@ -167,7 +194,8 @@ function renderData(mode,data){
     h+=`<div>${b.replace(/\\n/g,'<br>')}</div>`;
     document.getElementById(mode+'-body').innerHTML=h;
     const pp=data.prompt_pack||[];
-    document.getElementById(mode+'-prompts').innerText=pp.join('\n')}
+    document.getElementById(mode+'-prompts').innerText=pp.join('\n');
+    if(pp.length){const cur=document.getElementById('img-p').value;document.getElementById('img-p').value=(cur?cur+'\n':'')+pp.join('\n');flog(`📦 ${mode} 발주서 ${pp.length}건 → 팩토리 자동 적재`)}}
 
 function copyPane(id){const r=document.createRange();r.selectNode(document.getElementById(id));window.getSelection().removeAllRanges();window.getSelection().addRange(r);document.execCommand('copy');window.getSelection().removeAllRanges();showToast('원고 복사 완료!')}
 function copyPromptPack(id){navigator.clipboard.writeText(document.getElementById(id).innerText);showToast('발주서 복사 완료! AI Flow에 붙여넣으세요')}

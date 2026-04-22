@@ -52,17 +52,19 @@ textarea::placeholder{color:#555}
   <h1>⚡ Os Studio AI Flow 4321</h1>
   <p>멀티 플랫폼 통합 공장 시스템</p>
   <div class="status">
-    <span><span class="status-dot on" id="dot-dashboard"></span> Dashboard</span>
+    <span><span class="status-dot on" id="dot-dashboard"></span> Dash</span>
     <span><span class="status-dot off" id="dot-imagen"></span> Imagen</span>
-    <span><span class="status-dot off" id="dot-runway"></span> Runway</span>
+    <span><span class="status-dot off" id="dot-luma"></span> Luma</span>
     <span><span class="status-dot off" id="dot-suno"></span> Suno</span>
+    <span><span class="status-dot off" id="dot-eleven"></span> Eleven</span>
   </div>
 </div>
 
 <div class="tabs">
   <button class="active" data-tab="image">📷 Imagen</button>
-  <button data-tab="video">🎬 Runway</button>
+  <button data-tab="video">🎬 Luma</button>
   <button data-tab="audio">🎵 Suno</button>
+  <button data-tab="tts">🗣️ Eleven</button>
 </div>
 
 <div class="tab-content active" id="tab-image">
@@ -72,15 +74,21 @@ textarea::placeholder{color:#555}
 </div>
 
 <div class="tab-content" id="tab-video">
-  <span class="section-label">영상 발주서 (Runway ML)</span>
-  <textarea id="prompt-video" placeholder="영상 프롬프트를 입력하세요...&#10;줄바꿈으로 여러 편 생성 가능"></textarea>
+  <span class="section-label">영상 발주서 (Luma Dream Machine)</span>
+  <textarea id="prompt-video" placeholder="영상 프롬프트 입력..."></textarea>
   <div class="prompt-count"><span id="count-video">0</span>편 대기</div>
 </div>
 
 <div class="tab-content" id="tab-audio">
-  <span class="section-label">음악 발주서 (Suno)</span>
-  <textarea id="prompt-audio" placeholder="음악 프롬프트를 입력하세요...&#10;예: upbeat Korean hip-hop, energetic, modern beat"></textarea>
+  <span class="section-label">음악 발주서 (Suno AI)</span>
+  <textarea id="prompt-audio" placeholder="음악 프롬프트 입력..."></textarea>
   <div class="prompt-count"><span id="count-audio">0</span>곡 대기</div>
+</div>
+
+<div class="tab-content" id="tab-tts">
+  <span class="section-label">성우 발주서 (ElevenLabs)</span>
+  <textarea id="prompt-tts" placeholder="음성 변환할 텍스트 입력..."></textarea>
+  <div class="prompt-count"><span id="count-tts">0</span>건 대기</div>
 </div>
 
 <div class="btn-group">
@@ -90,11 +98,11 @@ textarea::placeholder{color:#555}
 </div>
 
 <div class="quick-links">
-  <a class="quick-link" href="https://labs.google/fx/tools/image-fx" target="_blank">Labs FX 열기</a>
-  <a class="quick-link" href="https://app.runwayml.com" target="_blank">Runway 열기</a>
-  <a class="quick-link" href="https://suno.com/create" target="_blank">Suno 열기</a>
-  <a class="quick-link" href="https://lumalabs.ai" target="_blank">Luma 열기</a>
-  <a class="quick-link" href="http://127.0.0.1:5000" target="_blank">대시보드 열기</a>
+  <a class="quick-link" href="https://labs.google/fx/tools/image-fx" target="_blank">Labs FX</a>
+  <a class="quick-link" href="https://lumalabs.ai/dream-machine" target="_blank">Luma</a>
+  <a class="quick-link" href="https://suno.com/create" target="_blank">Suno</a>
+  <a class="quick-link" href="https://elevenlabs.io" target="_blank">ElevenLabs</a>
+  <a class="quick-link" href="http://127.0.0.1:5000" target="_blank">대시보드</a>
 </div>
 
 <div class="log">
