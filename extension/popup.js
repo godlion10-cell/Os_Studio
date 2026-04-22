@@ -201,17 +201,22 @@ async function injectToTab(tabId, promptText, config) {
           inputEl.dispatchEvent(new InputEvent('input', { bubbles: true, data: text }));
         }
 
-        // 1.5초 뒤 생성 버튼 클릭
+        // 1.5초 뒤 생성 버튼 클릭 및 엔터 전송
         setTimeout(() => {
           let btnEl = null;
           for (const sel of cfg.btnCSS) {
             btnEl = document.querySelector(sel);
             if (btnEl && !btnEl.disabled) break;
           }
+          // 1. 혹시 버튼 좌표를 찾았다면 클릭하고
           if (btnEl) {
             btnEl.click();
-            console.log(`[Os Studio RPA] ${cfg.name} 가동 완료`);
           }
+          // 2. 버튼 좌표를 몰라서 못 찾았어도, 로봇이 엔터(Enter)키를 강제로 때려버립니다!
+          inputEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+          inputEl.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+          
+          console.log(`[Os Studio RPA] ${cfg.name} 엔터 전송 완료!`);
         }, 1500);
 
         // 알림
