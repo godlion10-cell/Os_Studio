@@ -240,9 +240,42 @@ def index(): return render_template_string(HTML_TEMPLATE)
 
 @app.route('/api/radar')
 def get_radar():
-    today=get_today()
-    r=call_json(f"오늘 {today} 기준 한국 수익화 블로그 키워드. 검색용 5개, 홈판용 5개. JSON: {{\"search\":[],\"home\":[]}}")
-    return jsonify(r or {"search":["재시도"],"home":["대기"]})
+    # 분석팀장의 뇌 구조를 사장님의 기획 의도에 맞게 완전히 뜯어고칩니다.
+    prompt = f"""
+    오늘 날짜: {get_today()}. 
+    당신은 최상급 미디어 트렌드 분석가입니다. 사장님을 위해 두 가지 명확한 카테고리로 가장 핫하고 돈이 되는 키워드를 각각 5개씩 뽑아주세요.
+    
+    1. [search] (검색 유입형): 사람들이 정보를 얻기 위해 네이버나 구글에 '직접 타자를 쳐서 검색'하는 키워드. 
+       - 특징: 정보성, 해결책, 안정적 트래픽, ~하는 법, ~후기, ~지원금 등.
+       - 예시: "2026년 청년 도약 계좌 조건", "아이폰 18 프로 맥스 실사용 후기", "연말정산 환급금 조회 방법"
+       
+    2. [home] (홈판 알고리즘형): 네이버 메인 홈이나 구글 디스커버에 떴을 때 썸네일과 제목만 보고 호기심에 이끌려 무심코 클릭하게 되는 도파민 유발 키워드. 
+       - 특징: 자극적, 트렌디, 공감, 분노, 숨겨진 비밀, ~하는 진짜 이유 등.
+       - 예시: "90년대생이 입사 1년 만에 퇴사하는 진짜 이유", "강남 꼬마빌딩 반토막 충격", "의사들이 절대 안 먹는 3가지 음식"
+    
+    반드시 아래 JSON 양식에 맞춰 정확히 반환하세요:
+    {{
+        "search": ["키워드1", "키워드2", "키워드3", "키워드4", "키워드5"],
+        "home": ["키워드1", "키워드2", "키워드3", "키워드4", "키워드5"]
+    }}
+    """
+    
+    try:
+        # 모델을 2.0으로 업그레이드하여 통찰력 강화
+        res = client.models.generate_content(
+            model='gemini-2.0-flash', 
+            contents=prompt, 
+            config=types.GenerateContentConfig(response_mime_type="application/json")
+        )
+        return jsonify(json.loads(res.text.strip()))
+        
+    except Exception as e:
+        print(f"레이더 엔진 에러: {e}")
+        # 만약 API 오류가 나더라도 화면이 비어있지 않게 비상용 키워드를 던져줍니다.
+        return jsonify({
+            "search": ["2026년 정부 지원금", "chatGPT 실전 사용법", "미국 배당주 추천"],
+            "home": ["월 1000만원 자동수익의 비밀", "평생 후회하는 3가지 소비", "지금 안 사면 품절되는 가성비템"]
+        })
 
 @app.route('/api/history')
 def get_history():
