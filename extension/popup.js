@@ -26,6 +26,14 @@ const factoryMap = {
     url: "https://elevenlabs.io",
     inputCSS: ["textarea[name='text']","textarea[placeholder*='Enter']","textarea","[contenteditable='true']"],
     btnCSS: ["button[type='submit']","button[aria-label*='Generate']","button[aria-label*='Convert']"]
+  },
+  "타겟사이트주소.com": { 
+    name: "영상 공장", 
+    promptId: "vid-prompt", 
+    // 사장님이 방금 훔쳐온 '입력창 좌표'를 여기에 넣습니다!
+    inputCSS: ["textarea[placeholder*='Describe what you want']"], 
+    // ⚠️ 이제 이 '버튼 좌표' 하나만 더 찾으시면 끝납니다!
+    btnCSS: ["여기에_버튼_좌표를_넣으세요"]
   }
 };
 
@@ -56,6 +64,12 @@ function addLog(msg, type = 'info') {
   const ts = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   log.innerHTML += `<div class="${type}">[${ts}] ${msg}</div>`;
   log.scrollTop = log.scrollHeight;
+}
+
+function clearTab(id) {
+  const ta = document.getElementById(id);
+  if (ta) { ta.value = ''; ta.dispatchEvent(new Event('input')); }
+  addLog('발주서 초기화 완료', 'info');
 }
 
 function setDot(id, on) {

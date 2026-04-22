@@ -1,4 +1,4 @@
-import os, json, re, sys
+import os, json, re, sys, urllib.parse, uuid
 from datetime import datetime
 from flask import Flask, request, jsonify, render_template_string
 from google import genai
@@ -102,9 +102,11 @@ HTML_TEMPLATE = r"""
         .copy-btn:hover{background:var(--naver);color:#fff;border-color:var(--naver)}
         .writing-area{flex:1;padding:40px;overflow-y:auto;text-align:center;word-break:keep-all;line-height:1.9;font-size:16px}
         .img-ph{display:block;width:85%;margin:20px auto;padding:30px;background:#f9f9f9;border:2px dashed #ccc;color:#888;font-size:13px;border-radius:8px}
-        .factory-hub{max-height:220px;background:#1e1e1e;color:#a1a1aa;border-top:3px solid var(--naver);padding:15px;overflow-y:auto;font-family:monospace;font-size:12px}
-        .factory-title{color:#00c73c;font-weight:bold;font-size:14px;margin-bottom:10px;display:block}
-        .copy-pack-btn{padding:6px 12px;background:#3b82f6;color:#fff;border:none;border-radius:4px;cursor:pointer;float:right;font-weight:bold}
+        .factory-hub{height:350px;background:#1e1e1e;color:#a1a1aa;border-top:3px solid var(--naver);padding:15px;display:flex;flex-direction:column;gap:10px}
+        .factory-title{color:#00c73c;font-weight:bold;font-size:16px;margin-bottom:5px}
+        .prompt-textarea{flex:1;background:#2d2d30;color:#4af626;padding:15px;font-family:monospace;font-size:14px;border:1px solid #444;border-radius:6px;resize:none;width:100%;box-sizing:border-box;line-height:1.6;outline:none}
+        .prompt-textarea:focus{border-color:#00c73c}
+        .copy-pack-btn{padding:10px;background:#3b82f6;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:bold;font-size:14px;width:100%;transition:0.2s}
         .copy-pack-btn:hover{background:#2563eb}
         #loading{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:1000;justify-content:center;align-items:center;flex-direction:column;color:#fff}
         .toast{position:fixed;bottom:30px;right:30px;background:var(--naver);color:#fff;padding:14px 24px;border-radius:10px;font-weight:bold;z-index:2000;animation:fi 2.5s}
@@ -153,19 +155,21 @@ HTML_TEMPLATE = r"""
         <div class="pane">
             <div class="pane-header"><strong style="color:var(--hacker)">🔥 해커 모드 원고</strong><button class="copy-btn" onclick="copyPane('hacker-body')">원고 복사</button></div>
             <div class="writing-area" id="hacker-body">좌측 레이더에서 키워드를 클릭하세요.</div>
-            <div class="factory-hub">
-                <span class="factory-title">📦 이미지팀장 발주서</span>
-                <button class="copy-pack-btn" onclick="copyPromptPack('hacker-prompts')">발주서 복사</button>
-                <pre id="hacker-prompts" style="white-space:pre-wrap;margin-top:10px">대기 중...</pre>
+            <div class="factory-hub" style="background: #111; padding: 15px; border-top: 3px solid #00c73c; height: auto; min-height: 250px;">
+                <span class="factory-title" style="color:white;">🖼️ 이미지팀 다이렉트 산출물 (자동 완성)</span>
+                <div id="hacker-images" style="display: flex; gap: 10px; overflow-x: auto; margin-top: 10px;">
+                    <div style="color:#666; font-size:12px; margin:20px auto;">원고가 생성되면 이곳에 이미지가 자동 배치됩니다.</div>
+                </div>
             </div>
         </div>
         <div class="pane">
             <div class="pane-header"><strong style="color:var(--healer)">🍀 힐링 모드 원고</strong><button class="copy-btn" onclick="copyPane('healer-body')">원고 복사</button></div>
             <div class="writing-area" id="healer-body">원클릭으로 동시 작성됩니다.</div>
-            <div class="factory-hub">
-                <span class="factory-title">📦 이미지팀장 발주서</span>
-                <button class="copy-pack-btn" onclick="copyPromptPack('healer-prompts')">발주서 복사</button>
-                <pre id="healer-prompts" style="white-space:pre-wrap;margin-top:10px">대기 중...</pre>
+            <div class="factory-hub" style="background: #111; padding: 15px; border-top: 3px solid #00c73c; height: auto; min-height: 250px;">
+                <span class="factory-title" style="color:white;">🖼️ 이미지팀 다이렉트 산출물 (자동 완성)</span>
+                <div id="healer-images" style="display: flex; gap: 10px; overflow-x: auto; margin-top: 10px;">
+                    <div style="color:#666; font-size:12px; margin:20px auto;">원고가 생성되면 이곳에 이미지가 자동 배치됩니다.</div>
+                </div>
             </div>
         </div>
     </div>
@@ -190,15 +194,36 @@ async function runOneClick(kw){
 function renderData(mode,data){
     if(!data){document.getElementById(mode+'-body').innerHTML='<p style="color:#999">생성 실패</p>';return}
     let h=`<h1 style="font-size:22px;margin-bottom:25px">${data.title||''}</h1>`;
-    let b=(data.script||'').replace(/\[📷\s*이미지\s*(\d+)[:\s]*(.*?)\]/g,'<div class="img-ph">📷 이미지 $1: $2</div>');
+    let b=(data.script||'');
+    const images = data.generated_images || [];
+    b = b.replace(/\[📷\s*이미지\s*(\d+).*?\]/g, (match, p1) => {
+        const idx = parseInt(p1) - 1;
+        if (images[idx]) {
+            return `<div class="img-ph" style="padding:10px;border:none"><img src="${images[idx]}" style="max-width:100%;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.1)"></div>`;
+        }
+        return `<div class="img-ph">📷 이미지 ${p1} (생성 중)</div>`;
+    });
     h+=`<div>${b.replace(/\\n/g,'<br>')}</div>`;
     document.getElementById(mode+'-body').innerHTML=h;
+    
+    // 생성된 이미지를 화면 하단 팩토리 허브에 바로 꽂아버리기
+    const imgContainer = document.getElementById(mode+'-images');
+    imgContainer.innerHTML = ''; // 초기화
+    
+    images.forEach((url, index) => {
+        const imgElement = `<div style="text-align: center; flex: 0 0 auto;">
+                              <img src="${url}" style="height: 200px; border-radius: 8px; border: 2px solid #333;" alt="Generated Image">
+                              <div style="font-size: 11px; margin-top: 5px; color: #888;">[이미지 ${index + 1}]</div>
+                            </div>`;
+        imgContainer.innerHTML += imgElement;
+    });
+    
     const pp=data.prompt_pack||[];
-    document.getElementById(mode+'-prompts').innerText=pp.join('\n');
-    if(pp.length){const cur=document.getElementById('img-p').value;document.getElementById('img-p').value=(cur?cur+'\n':'')+pp.join('\n');flog(`📦 ${mode} 발주서 ${pp.length}건 → 팩토리 자동 적재`)}}
+    if(pp.length){const cur=document.getElementById('img-p').value;document.getElementById('img-p').value=(cur?cur+'\n':'')+pp.join('\n');flog(`📦 ${mode} 발주서 ${pp.length}건 → 팩토리 자동 적재`)}
+}
 
 function copyPane(id){const r=document.createRange();r.selectNode(document.getElementById(id));window.getSelection().removeAllRanges();window.getSelection().addRange(r);document.execCommand('copy');window.getSelection().removeAllRanges();showToast('원고 복사 완료!')}
-function copyPromptPack(id){navigator.clipboard.writeText(document.getElementById(id).innerText);showToast('발주서 복사 완료! AI Flow에 붙여넣으세요')}
+function copyPromptPack(id){navigator.clipboard.writeText(document.getElementById(id).value);showToast('발주서 복사 완료! Labs FX에 붙여넣으세요')}
 
 async function loadHistory(){try{const r=await fetch('/api/history');const f=await r.json();const el=document.getElementById('history-list');if(!f.length){el.innerText='없음';return}
 el.innerHTML=f.map(x=>`<div class="history-item"><span onclick="loadSingle('${x.fn}')">${x.dp}</span><span class="del-btn" onclick="event.stopPropagation();delOne('${x.fn}')">×</span></div>`).join('')}catch(e){}}
@@ -260,11 +285,19 @@ def one_click_execute():
         prompt=f"""주제:'{kw}', 모드:{mode_desc}. 오늘:{today}.
 {SYSTEM_PROTOCOL}{rf}
 JSON만 응답:
-{{"title":"훅 제목","script":"본문(최소800자). 도입(2~3문단)→[📷 이미지 1: 상황묘사]→전개(2~3문단)→[📷 이미지 2: 근거/증거]→핵심(2~3문단)→[📷 이미지 3: 결과]→마무리. 이미지 마커는 문단 사이 독립 줄.","prompt_pack":["각 이미지 마커에 대응하는 영어 실사 프롬프트 4개. No text, cinematic, 8k."]}}"""
+{{"title":"훅 제목","script":"본문(최소800자). 도입(2~3문단)→[📷 이미지 1]→전개(2~3문단)→[📷 이미지 2]→핵심(2~3문단)→[📷 이미지 3]→마무리. 이미지 마커는 문단 사이 독립 줄.","prompt_pack":["각 이미지 마커에 1:1 대응하는 영문 실사 프롬프트 3~4개. 반드시 각 프롬프트 끝에 이 문구 포함: , hyper-realistic, 8k resolution, raw photo, DSLR, NO DRAWING, NO SKETCH"]}}"""
         data=call_text(prompt)
         if not data: return None
         meta.sync(data.get('script',''))
         data['meta']={'sentiment':meta.s,'tone':meta.tone(),'blocked':len(meta.det)}
+        
+        # Pollinations.ai URL 바로 생성
+        image_urls = []
+        for eng_prompt in data.get('prompt_pack', []):
+            enc = urllib.parse.quote(eng_prompt)
+            url = f"https://image.pollinations.ai/prompt/{enc}?width=1024&height=1024&nologo=true&seed={uuid.uuid4().int}"
+            image_urls.append(url)
+        data['generated_images'] = image_urls
         return data
 
     hacker=process("hacker","츤데레 코치. 팩트폭행. IT비유. 단정형.")
