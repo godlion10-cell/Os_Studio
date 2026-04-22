@@ -195,7 +195,7 @@ function renderData(mode,data){
     if(!data){document.getElementById(mode+'-body').innerHTML='<p style="color:#999">생성 실패</p>';return}
     let h=`<h1 style="font-size:22px;margin-bottom:25px">${data.title||''}</h1>`;
     let b=(data.script||'');
-    const images = data.generated_images || [];
+    const images = data.images || data.generated_images || [];
     b = b.replace(/\[📷\s*이미지\s*(\d+).*?\]/g, (match, p1) => {
         const idx = parseInt(p1) - 1;
         if (images[idx]) {
@@ -281,27 +281,58 @@ def one_click_execute():
     today=get_today()
     meta.scan(); rf=meta.reinforce()
 
-    def process(mode_name, mode_desc):
-        prompt=f"""주제:'{kw}', 모드:{mode_desc}. 오늘:{today}.
-{SYSTEM_PROTOCOL}{rf}
-JSON만 응답:
-{{"title":"훅 제목","script":"본문(최소800자). 도입(2~3문단)→[📷 이미지 1]→전개(2~3문단)→[📷 이미지 2]→핵심(2~3문단)→[📷 이미지 3]→마무리. 이미지 마커는 문단 사이 독립 줄.","prompt_pack":["각 이미지 마커에 1:1 대응하는 영문 실사 프롬프트 3~4개. 반드시 각 프롬프트 끝에 이 문구 포함: , hyper-realistic, 8k resolution, raw photo, DSLR, NO DRAWING, NO SKETCH"]}}"""
-        data=call_text(prompt)
-        if not data: return None
-        meta.sync(data.get('script',''))
-        data['meta']={'sentiment':meta.s,'tone':meta.tone(),'blocked':len(meta.det)}
+    def process_agent(mode):
+        prompt = f"""
+        주제: '{kw}', 모드: '{mode}'. 
+        1. [작가]: 본문 중간중간 [📷 이미지 1], [📷 이미지 2] 형태로 2개의 사진 들어갈 자리를 표시할 것.
+        2. [이미지팀장]: 본문 내용에 맞는 실사 사진 프롬프트를 영문으로 2개 작성할 것.
+        ★ 무조건 이 문구를 프롬프트 끝에 붙일 것: ", hyper-realistic, 8k resolution, raw photo, detailed, shot on DSLR, NO DRAWING, NO SKETCH"
         
-        # Pollinations.ai URL 바로 생성
-        image_urls = []
-        for eng_prompt in data.get('prompt_pack', []):
-            enc = urllib.parse.quote(eng_prompt)
-            url = f"https://image.pollinations.ai/prompt/{enc}?width=1024&height=1024&nologo=true&seed={uuid.uuid4().int}"
-            image_urls.append(url)
-        data['generated_images'] = image_urls
-        return data
+        JSON: {{
+            "title": "제목",
+            "script": "본문 내용...",
+            "prompts": ["1번 프롬프트", "2번 프롬프트"]
+        }}
+        """
+        
+        try:
+            # AI에게 데이터 요청
+            res = client.models.generate_content(model=TEXT_MODELS[0], contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
+            
+            # [핵심 방어막] AI가 불필요한 마크다운(```json)을 붙여도 강제로 뜯어냅니다.
+            raw_text = res.text.strip()
+            if raw_text.startswith("```json"):
+                raw_text = raw_text[7:]
+            if raw_text.endswith("```"):
+                raw_text = raw_text[:-3]
+            raw_text = raw_text.strip()
+            
+            data = json.loads(raw_text)
+            
+            # 엔진에 직접 프롬프트를 쏴서 이미지 URL 생성
+            image_urls = []
+            for eng_prompt in data.get('prompts', []):
+                encoded_prompt = urllib.parse.quote(eng_prompt)
+                direct_image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true&seed={uuid.uuid4().int}"
+                image_urls.append(direct_image_url)
+                
+            return {
+                "title": data.get("title", f"{kw}에 대한 글"),
+                "script": data.get("script", "내용을 불러오지 못했습니다."),
+                "generated_images": image_urls
+            }
+            
+        except Exception as e:
+            # 에러가 나더라도 시스템이 멈추지 않고 '비상용 데이터'를 보냅니다.
+            print(f"[{mode} 모드 에러 발생]: {e}")
+            return {
+                "title": f"⚠️ {mode} 모드 생성 지연",
+                "script": "AI 서버와의 연결이 지연되었습니다. 레이더에서 주제를 다시 한번 클릭해 주세요.",
+                "generated_images": ["https://image.pollinations.ai/prompt/error?width=1024&height=1024&nologo=true"]
+            }
 
-    hacker=process("hacker","츤데레 코치. 팩트폭행. IT비유. 단정형.")
-    healer=process("healer","따뜻한 치유자. ASMR. 감각적 묘사.")
+    hacker=process_agent("해커")
+    healer=process_agent("힐링")
 
     if not hacker and not healer:
         return jsonify({"status":"error","message":"AI 생성 실패. 재시도."})
