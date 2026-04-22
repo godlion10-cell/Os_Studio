@@ -1,6 +1,5 @@
 import os
 import json
-import time
 import re
 import sys
 from datetime import datetime
@@ -9,125 +8,140 @@ from google import genai
 from google.genai import types
 from dotenv import load_dotenv
 
-# 🛡️ 인코딩 방어
 if sys.stdout.encoding != 'utf-8':
     try: sys.stdout.reconfigure(encoding='utf-8')
     except: pass
 
 load_dotenv()
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite']  # 검증된 모델만
+MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite']
 
 app = Flask(__name__)
 SAVE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'saved_content')
 os.makedirs(SAVE_DIR, exist_ok=True)
 
-HUMANIZER_PROTOCOL = """
-[CRITICAL: 안티-AI 감지 및 100% 휴머나이징 규칙]
-1. AI 금지어 절대 삭제: "결론적으로", "요약하자면", "이처럼", "중요한 것은", "기억하세요".
-2. 의도적 불완전함: 너무 완벽한 문어체를 쓰지 마라. "아니 진짜로,", "솔직히 말해서", "하아...", "~랄까?" 같은 인간의 구어체 추임새를 문단마다 1개씩 자연스럽게 섞을 것.
-3. 시청자 빙의: 가르치려 들지 말고, 멱살 잡고 끌고 가거나(도파민), 옆에 앉아 등을 토닥여라(옥시토신).
-4. 문장 호흡 파괴: 긴 문장 뒤에는 무조건 아주 짧은 단문을 배치하여 리듬감을 만든다.
+def get_today():
+    return datetime.now().strftime('%Y년 %m월 %d일')
+
+HUMAN_PROMPT = """
+[딥 소울 가이드라인]
+1. 인사말 절대 금지: "안녕하세요", "~마스터입니다" 쓰지 마라.
+2. 오프닝: 힐링은 감각적 묘사로, 해커는 날카로운 페인포인트로 즉시 시작.
+3. 현재 시점 기준 최신 정보만 취급. 과거 정보 금지.
+4. 이미지 삽입구 3~4개 필수: [이미지 1: 설명] 형식.
+5. 쇼츠: 60초 이내, 9컷 이내 강렬한 대사 위주.
+6. 인스타: 감성적 첫 문장 + 해시태그 10개.
 """
 
-VISUAL_GUARDRAIL = """
-[CRITICAL: 영상 생성 8대 가드레일 강제 적용]
-비디오 프롬프트 작성 시 끝에 무조건 다음 문장을 영어로 붙일 것:
-"Lock temporal and spatial continuity. Unbroken single-take. Preserve cinematic film grain and precise textures. Strictly preserve all visible Hangul. Zero temporal flickering or AI plastic look."
-"""
-
-def get_previous_titles(max_count=10):
-    """이전 저장 원고 제목 수집 (중복 방지용)"""
-    titles = []
-    try:
-        for fname in sorted(os.listdir(SAVE_DIR), reverse=True)[:max_count]:
-            if not fname.endswith('.json'): continue
-            with open(os.path.join(SAVE_DIR, fname), 'r', encoding='utf-8') as f:
-                meta = json.load(f)
-            titles.append(meta.get('title', ''))
-    except: pass
-    return [t for t in titles if t]
-
-def clean_json_response(raw_text):
-    text = raw_text.strip()
-    if text.startswith('```json'):
-        text = text[7:]
-    elif text.startswith('```'):
-        text = text[3:]
-    if text.endswith('```'):
-        text = text[:-3]
+def clean_json(raw):
+    text = raw.strip()
+    text = re.sub(r'^```\w*\n?', '', text)
+    if text.endswith('```'): text = text[:-3]
     return text.strip()
 
-HTML_TEMPLATE = """
+def call_gemini(prompt, use_json_mime=False):
+    for m_id in MODELS:
+        try:
+            config = types.GenerateContentConfig(
+                response_mime_type="application/json" if use_json_mime else None,
+                temperature=0.8 if not use_json_mime else None
+            )
+            res = client.models.generate_content(model=m_id, contents=prompt, config=config)
+            return json.loads(res.text) if use_json_mime else json.loads(clean_json(res.text))
+        except Exception as e:
+            print(f"[{m_id}] Error: {e}")
+            continue
+    return None
+
+HTML_TEMPLATE = r"""
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>Os Studio v15.1 - Real World Edition</title>
+    <title>Os Studio v16.5 - Clean Factory</title>
     <style>
-        :root { --bg: #09090b; --panel: #18181b; --text: #e4e4e7; --accent: #3b82f6; --dopamine: #ef4444; --oxytocin: #10b981; }
-        body { margin: 0; display: flex; font-family: sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; }
-        #sidebar { width: 300px; background: var(--panel); border-right: 1px solid #27272a; padding: 20px; overflow-y: auto; }
-        .history-item { padding: 12px; margin-bottom: 8px; background: #27272a; border-radius: 8px; font-size: 13px; cursor: pointer; color: #a1a1aa; transition: 0.2s; }
-        .history-item:hover { background: #3f3f46; color: white; }
-        .history-actions { display: flex; gap: 6px; margin-top: 6px; }
-        .history-actions button { padding: 3px 8px; font-size: 11px; border-radius: 4px; }
+        :root { --bg: #f8f9fa; --sidebar: #1a1a1b; --naver-green: #00c73c; --accent: #3b82f6; --danger: #ff4d4d; }
+        body { margin: 0; display: flex; font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; background: var(--bg); height: 100vh; overflow: hidden; color: #333; }
+        
+        #sidebar { width: 340px; background: var(--sidebar); color: #999; display: flex; flex-direction: column; border-right: 1px solid #333; }
+        .sidebar-section { padding: 15px; border-bottom: 1px solid #333; overflow-y: auto; }
+        .keyword-chip { padding: 5px 10px; margin: 3px; background: #333; border-radius: 4px; font-size: 11px; cursor: pointer; display: inline-block; color: #00c73c; transition: 0.2s; }
+        .keyword-chip:hover { background: #444; color: white; }
+        
+        .history-controls { display: flex; gap: 5px; margin-bottom: 10px; }
+        .history-btn { flex: 1; padding: 5px; font-size: 11px; cursor: pointer; background: #333; color: #ccc; border: none; border-radius: 3px; transition: 0.2s; }
+        .history-btn:hover { background: #444; }
+
+        .history-item { display: flex; align-items: center; padding: 8px; background: #27272a; border-radius: 4px; margin-bottom: 5px; font-size: 11px; cursor: pointer; }
+        .history-item:hover { background: #3a3a3a; }
+        .history-item input[type="checkbox"] { margin-right: 8px; cursor: pointer; accent-color: var(--naver-green); }
+        .history-item span { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #ccc; }
+
         #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-        #toolbar { padding: 20px; background: var(--panel); border-bottom: 1px solid #27272a; display: flex; gap: 15px; justify-content: center; align-items: center; }
-        input { padding: 12px; width: 400px; border-radius: 8px; border: 1px solid #3f3f46; background: #27272a; color: white; outline: none; font-size: 15px; }
-        button { padding: 12px 24px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; color: white; transition: 0.2s; }
-        .btn-dopamine { background: var(--dopamine); }
-        .btn-dopamine:hover { background: #dc2626; transform: translateY(-1px); }
-        .btn-oxytocin { background: var(--oxytocin); }
-        .btn-oxytocin:hover { background: #059669; transform: translateY(-1px); }
-        .btn-naver { background: #2db400; font-size: 11px; padding: 4px 10px; }
-        #content { padding: 30px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; align-items: center; gap: 20px; }
-        .card { background: var(--panel); padding: 30px; border-radius: 12px; width: 100%; max-width: 900px; border: 1px solid #27272a; }
-        .badge { display: inline-block; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; margin-bottom: 15px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
-        th, td { border: 1px solid #3f3f46; padding: 12px; text-align: left; }
-        th { background: #27272a; color: var(--accent); }
-        pre { white-space: pre-wrap; line-height: 1.8; font-size: 15px; color: #d4d4d8; }
-        #loading { display: none; position: fixed; inset: 0; background: rgba(9,9,11,0.95); z-index: 1000; justify-content: center; align-items: center; flex-direction: column; }
-        .series-label { display: flex; align-items: center; gap: 8px; color: #a1a1aa; font-size: 13px; cursor: pointer; }
-        .series-label input { width: 18px; height: 18px; accent-color: var(--accent); }
-        .toast { position: fixed; bottom: 30px; right: 30px; background: #2db400; color: white; padding: 14px 24px; border-radius: 10px; font-weight: bold; z-index: 2000; animation: fadeInOut 2.5s ease-in-out; }
-        @keyframes fadeInOut { 0% { opacity:0; transform:translateY(20px); } 15% { opacity:1; transform:translateY(0); } 85% { opacity:1; } 100% { opacity:0; } }
+        #toolbar { padding: 15px; background: white; border-bottom: 1px solid #ddd; display: flex; gap: 10px; justify-content: center; align-items: center; }
+        input#keyword { padding: 10px; width: 350px; border: 1px solid #ddd; border-radius: 6px; outline: none; font-size: 14px; }
+        .gen-btn { padding: 10px 20px; background: var(--naver-green); color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .gen-btn:hover { background: #00b336; }
+        
+        #editor-container { display: flex; flex: 1; overflow: hidden; gap: 10px; padding: 10px; }
+        .editor-pane { flex: 1; background: white; border: 1px solid #ddd; border-radius: 8px; display: flex; flex-direction: column; overflow: hidden; }
+        .pane-header { padding: 10px 15px; background: #fafafa; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+        .copy-btn { padding: 5px 10px; font-size: 11px; cursor: pointer; border: 1px solid #ddd; background: white; border-radius: 4px; font-weight: bold; }
+        .copy-btn:hover { background: var(--naver-green); color: white; border-color: var(--naver-green); }
+        .writing-area { flex: 1; padding: 40px 25px; overflow-y: auto; text-align: center; word-break: keep-all; line-height: 1.8; font-size: 16px; }
+        .sns-hub { background: #f8f9fa; padding: 20px; border-top: 2px solid #00c73c; font-size: 12px; text-align: left; line-height: 1.6; max-height: 250px; overflow-y: auto; }
+        .sns-hub pre { white-space: pre-wrap; font-size: 12px; background: white; padding: 10px; border-radius: 4px; margin: 8px 0; }
+        .img-guide { display: block; width: 85%; margin: 20px auto; padding: 30px; background: #fff; border: 2px dashed #ccc; color: #888; font-size: 13px; border-radius: 8px; }
+        
+        #loading { display: none; position: fixed; inset: 0; background: rgba(255,255,255,0.9); z-index: 1000; justify-content: center; align-items: center; flex-direction: column; }
+        .toast { position: fixed; bottom: 30px; right: 30px; background: var(--naver-green); color: white; padding: 14px 24px; border-radius: 10px; font-weight: bold; z-index: 2000; animation: fadeInOut 2.5s; }
+        @keyframes fadeInOut { 0%{opacity:0;transform:translateY(20px)} 15%{opacity:1;transform:translateY(0)} 85%{opacity:1} 100%{opacity:0} }
     </style>
 </head>
 <body>
     <div id="loading">
-        <h2 style="color: var(--accent);">엔진 구동 중...</h2>
-        <p style="color: #71717a;">인간의 뇌 구조에 맞는 대본을 조립하고 있습니다.</p>
+        <h2 style="color: var(--naver-green);">🧹 원고를 빚는 중...</h2>
+        <p style="color: #999;">블로그 + 쇼츠 + 인스타 × 2모드 동시 생성</p>
     </div>
-
+    
     <div id="sidebar">
-        <h3 style="color: var(--accent); margin-top: 0;">저장된 기록</h3>
-        <button onclick="loadHistoryList()" style="width: 100%; background: #3f3f46; margin-bottom: 15px; font-size: 13px;">새로고침</button>
-        <div id="history-list"></div>
+        <div class="sidebar-section">
+            <h5 style="color: #00c73c; margin: 0 0 10px 0;">🔍 실시간 레이더</h5>
+            <div id="trends">로딩 중...</div>
+        </div>
+        <div class="sidebar-section" style="flex: 2;">
+            <h5 style="color: #a1a1aa; margin: 0 0 10px 0;">💾 저장된 기록</h5>
+            <div class="history-controls">
+                <button class="history-btn" onclick="toggleAllCheck(true)">전체 선택</button>
+                <button class="history-btn" onclick="toggleAllCheck(false)">선택 해제</button>
+                <button class="history-btn" onclick="deleteSelected()" style="color: var(--danger);">선택 삭제</button>
+                <button class="history-btn" onclick="deleteAll()" style="color: var(--danger); font-weight: bold;">전체 삭제</button>
+            </div>
+            <div id="history-list">기록 없음</div>
+        </div>
     </div>
 
     <div id="main">
         <div id="toolbar">
-            <input type="text" id="keyword" placeholder="키워드 입력 (예: 이직, 주식, 고양이)">
-            <label class="series-label">
-                <input type="checkbox" id="series-mode"> 시리즈 모드
-            </label>
-            <button class="btn-dopamine" onclick="generate('DOPAMINE')">뉴로-해커 모드</button>
-            <button class="btn-oxytocin" onclick="generate('OXYTOCIN')">힐링 ASMR 모드</button>
+            <input type="text" id="keyword" placeholder="주제를 입력하세요">
+            <button class="gen-btn" onclick="generateDual()">💎 듀얼 소울 생성</button>
         </div>
-        
-        <div id="content">
-            <div class="card" id="output-area" style="display: none;">
-                <span class="badge" id="mode-badge"></span>
-                <h2 id="out-title" style="margin-top:0;"></h2>
-                <div style="color: #a1a1aa; margin-bottom: 20px;">페르소나: <span id="out-persona" style="color: #fbbf24;"></span></div>
-                
-                <h3 style="color: var(--accent); border-bottom: 1px solid #3f3f46; padding-bottom: 10px;">대본</h3>
-                <pre id="out-script"></pre>
-                
-                <h3 style="color: var(--accent); border-bottom: 1px solid #3f3f46; padding-bottom: 10px; margin-top: 40px;">시각화 설계도</h3>
-                <div id="out-table"></div>
+        <div id="editor-container">
+            <div class="editor-pane">
+                <div class="pane-header">
+                    <strong>🔥 뉴로-해커</strong>
+                    <button class="copy-btn" onclick="copyPane('hacker-blog')">블로그 복사</button>
+                </div>
+                <div class="writing-area" id="hacker-blog">키워드를 입력하고 생성하세요.</div>
+                <div class="sns-hub" id="hacker-sns"></div>
+            </div>
+            <div class="editor-pane">
+                <div class="pane-header">
+                    <strong>🍀 딥 소울 (힐링)</strong>
+                    <button class="copy-btn" onclick="copyPane('healer-blog')">블로그 복사</button>
+                </div>
+                <div class="writing-area" id="healer-blog">듀얼 모드로 동시 작성됩니다.</div>
+                <div class="sns-hub" id="healer-sns"></div>
             </div>
         </div>
     </div>
@@ -135,252 +149,218 @@ HTML_TEMPLATE = """
     <script>
         function showToast(msg) {
             const t = document.createElement('div');
-            t.className = 'toast';
-            t.innerText = msg;
+            t.className = 'toast'; t.innerText = msg;
             document.body.appendChild(t);
             setTimeout(() => t.remove(), 2600);
         }
 
-        function renderOutput(data, mode) {
-            document.getElementById('output-area').style.display = 'block';
-            const badge = document.getElementById('mode-badge');
-            
-            if(mode === 'DOPAMINE') {
-                badge.innerText = 'DOPAMINE MODE';
-                badge.style.background = 'var(--dopamine)';
-            } else if(mode === 'OXYTOCIN') {
-                badge.innerText = 'OXYTOCIN MODE';
-                badge.style.background = 'var(--oxytocin)';
-            } else {
-                badge.innerText = 'LOADED';
-                badge.style.background = 'var(--accent)';
-            }
-            
-            document.getElementById('out-title').innerText = data.title || '';
-            document.getElementById('out-persona').innerText = data.persona || '';
-            document.getElementById('out-script').innerText = typeof data.script === 'string' ? data.script : JSON.stringify(data.script, null, 2);
-            
-            const prompts = data.prompts || [];
-            let tableHTML = '<table><tr><th>컷</th><th>나레이션/대사</th><th>이미지 프롬프트</th><th>비디오 프롬프트</th></tr>';
-            prompts.forEach(p => {
-                tableHTML += `<tr><td>${p.cut||''}</td><td>${p.text||''}</td><td>${p.img||''}</td><td>${p.vid||''}</td></tr>`;
-            });
-            tableHTML += '</table>';
-            document.getElementById('out-table').innerHTML = tableHTML;
-            
-            document.getElementById('content').scrollTo(0, 0);
-        }
-
-        async function generate(mode) {
-            const kw = document.getElementById('keyword').value;
-            const isSeries = document.getElementById('series-mode').checked;
-            if(!kw) return alert('키워드를 입력하세요.');
-            
-            document.getElementById('loading').style.display = 'flex';
-            document.getElementById('output-area').style.display = 'none';
-
+        async function loadTrends() {
             try {
-                const res = await fetch('/api/generate', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ keyword: kw, mode: mode, series_mode: isSeries })
-                });
-                const result = await res.json();
-                
-                if(result.status === 'success') {
-                    renderOutput(result.data, mode);
-                    loadHistoryList();
-                    showToast('생성 + 자동 저장 완료');
-                } else {
-                    alert('생성 실패: ' + result.message);
-                }
-            } catch(e) {
-                alert('통신 오류: ' + e.message);
-            } finally {
-                document.getElementById('loading').style.display = 'none';
-            }
+                const res = await fetch('/api/trends');
+                const data = await res.json();
+                const sArr = Array.isArray(data.search) ? data.search : Object.values(data.search || {});
+                const hArr = Array.isArray(data.home) ? data.home : Object.values(data.home || {});
+                const all = [...sArr, ...hArr];
+                document.getElementById('trends').innerHTML = all.map(v => {
+                    const s = String(v).replace(/'/g, "\\'");
+                    return `<span class="keyword-chip" onclick="setKW('${s}')">${v}</span>`;
+                }).join('');
+            } catch(e) { document.getElementById('trends').innerText = '새로고침 하세요'; }
         }
 
-        async function loadHistoryList() {
+        function setKW(v) { document.getElementById('keyword').value = v; generateDual(); }
+
+        async function generateDual() {
+            const kw = document.getElementById('keyword').value;
+            if(!kw) return alert('키워드를 입력하세요.');
+            document.getElementById('loading').style.display = 'flex';
+            try {
+                const res = await fetch('/api/generate-dual', { 
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify({ keyword: kw }) 
+                });
+                const data = await res.json();
+                if(data.status === 'error') { alert(data.message); return; }
+                renderPane('hacker', data.hacker);
+                renderPane('healer', data.healer);
+                showToast('듀얼 생성 + 자동 저장 완료');
+                loadHistory();
+            } catch(e) { alert('통신 오류'); }
+            finally { document.getElementById('loading').style.display = 'none'; }
+        }
+
+        function renderPane(mode, data) {
+            if(!data || !data.blog) { 
+                document.getElementById(mode + '-blog').innerHTML = '<p style="color:#999;">생성 실패 - 재시도 해주세요</p>'; 
+                return; 
+            }
+            let blog = `<h1 style="font-size:22px; margin-bottom: 25px;">${data.blog.title || ''}</h1>`;
+            let body = (data.blog.script || '').replace(/\[이미지 \d+:\s*(.*?)\]/g, '<div class="img-guide">📷 사진 포인트: $1</div>');
+            blog += `<div>${body.replace(/\\n/g, '<br>')}</div>`;
+            document.getElementById(mode + '-blog').innerHTML = blog;
+            
+            let sns = '<b>🎬 쇼츠 대본:</b>';
+            sns += `<pre>${data.sns ? (data.sns.shorts || '') : ''}</pre>`;
+            sns += '<hr style="border-color:#eee;"><b>📸 인스타 캡션:</b>';
+            sns += `<pre>${data.sns ? (data.sns.insta || '') : ''}</pre>`;
+            document.getElementById(mode + '-sns').innerHTML = sns;
+        }
+
+        function copyPane(id) {
+            const range = document.createRange();
+            range.selectNode(document.getElementById(id));
+            window.getSelection().removeAllRanges();
+            window.getSelection().addRange(range);
+            document.execCommand('copy');
+            window.getSelection().removeAllRanges();
+            showToast('복사 완료! 네이버 블로그에 붙여넣으세요');
+        }
+
+        async function loadHistory() {
             try {
                 const res = await fetch('/api/history');
                 const files = await res.json();
-                const list = document.getElementById('history-list');
-                list.innerHTML = files.map(f => `
+                const el = document.getElementById('history-list');
+                if(!files.length) { el.innerText = '기록 없음'; return; }
+                el.innerHTML = files.map(f => `
                     <div class="history-item">
-                        <div onclick="loadSingleHistory('${f.filename}')" style="cursor:pointer;">${f.display}</div>
-                        <div class="history-actions">
-                            <button class="btn-naver" onclick="event.stopPropagation(); copyNaverFormat('${f.filename}')">네이버 복사</button>
-                        </div>
-                    </div>`
-                ).join('');
+                        <input type="checkbox" class="hist-check" data-name="${f.filename}">
+                        <span onclick="loadSingle('${f.filename}')">${f.display}</span>
+                    </div>
+                `).join('');
             } catch(e) {}
         }
 
-        async function loadSingleHistory(filename) {
-            try {
-                const res = await fetch(`/api/history/${filename}`);
-                const result = await res.json();
-                if(result.status === 'success') {
-                    renderOutput(result.data, 'LOADED');
-                }
-            } catch(e) {
-                alert('파일을 불러오지 못했습니다.');
-            }
+        function toggleAllCheck(val) {
+            document.querySelectorAll('.hist-check').forEach(c => c.checked = val);
         }
 
-        async function copyNaverFormat(filename) {
+        async function deleteSelected() {
+            const selected = Array.from(document.querySelectorAll('.hist-check:checked')).map(c => c.dataset.name);
+            if(!selected.length) return alert('삭제할 항목을 선택하세요.');
+            if(!confirm(`${selected.length}개 기록을 삭제할까요?`)) return;
+            await fetch('/api/delete-selected', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ filenames: selected }) });
+            showToast(`${selected.length}개 삭제 완료`);
+            loadHistory();
+        }
+
+        async function deleteAll() {
+            if(!confirm('모든 기록을 삭제하시겠습니까? 되돌릴 수 없습니다.')) return;
+            await fetch('/api/delete-all', { method: 'POST' });
+            showToast('전체 삭제 완료');
+            loadHistory();
+        }
+
+        async function loadSingle(name) {
             try {
-                const res = await fetch(`/api/naver-format/${filename}`);
+                const res = await fetch(`/api/history/${name}`);
                 const data = await res.json();
-                if(data.error) { alert(data.error); return; }
-                await navigator.clipboard.writeText(data.naver_html);
-                showToast('네이버 블로그 양식 복사 완료!');
-            } catch(e) { alert('복사 실패: ' + e.message); }
+                if(data.hacker) renderPane('hacker', data.hacker);
+                if(data.healer) renderPane('healer', data.healer);
+            } catch(e) { alert('불러오기 실패'); }
         }
 
-        window.onload = loadHistoryList;
+        window.onload = () => { loadTrends(); loadHistory(); };
     </script>
 </body>
 </html>
 """
 
 @app.route('/')
-def index():
-    return render_template_string(HTML_TEMPLATE)
+def index(): return render_template_string(HTML_TEMPLATE)
+
+@app.route('/api/trends')
+def get_trends():
+    today = get_today()
+    prompt = f"""
+    오늘은 {today}이다. 지금 시점 대한민국에서 화제인 키워드를 뽑아라.
+    1. 검색용(재테크, 정책뉴스, 상품리뷰): 정보성 키워드 8개
+    2. 홈판용(스타일, 뷰티, 연예/드라마): 자극적 키워드 8개
+    JSON: {{"search": [], "home": []}}
+    """
+    result = call_gemini(prompt, use_json_mime=True)
+    return jsonify(result or {"search": ["재시도 필요"], "home": ["대기 중"]})
 
 @app.route('/api/history')
 def get_history():
     files = []
-    for fname in sorted(os.listdir(SAVE_DIR), reverse=True):
+    for fname in sorted(os.listdir(SAVE_DIR), reverse=True)[:30]:
         if not fname.endswith('.json'): continue
         try:
             with open(os.path.join(SAVE_DIR, fname), 'r', encoding='utf-8') as f:
                 meta = json.load(f)
-            display = meta.get('title', fname)[:40]
-            files.append({"filename": fname, "display": display})
+            display = meta.get('keyword', fname[:25])
         except:
-            files.append({"filename": fname, "display": fname})
+            display = fname[:25]
+        files.append({"filename": fname, "display": display})
     return jsonify(files)
 
-@app.route('/api/history/<filename>')
-def get_single_history(filename):
-    filepath = os.path.join(SAVE_DIR, os.path.basename(filename))
-    if os.path.exists(filepath):
-        with open(filepath, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            return jsonify({"status": "success", "data": data})
-    return jsonify({"status": "error", "message": "파일 없음"})
+@app.route('/api/history/<name>')
+def history_single(name):
+    safe = os.path.basename(name)
+    fpath = os.path.join(SAVE_DIR, safe)
+    if not os.path.exists(fpath):
+        return jsonify({"error": "파일 없음"}), 404
+    with open(fpath, 'r', encoding='utf-8') as f:
+        return jsonify(json.load(f))
 
-@app.route('/api/naver-format/<filename>')
-def naver_format(filename):
+@app.route('/api/delete-selected', methods=['POST'])
+def delete_selected():
+    filenames = request.get_json().get('filenames', [])
+    deleted = 0
+    for f in filenames:
+        safe = os.path.basename(f)  # 경로 탈출 방지
+        path = os.path.join(SAVE_DIR, safe)
+        if os.path.exists(path):
+            os.remove(path)
+            deleted += 1
+    return jsonify({"status": "success", "deleted": deleted})
+
+@app.route('/api/delete-all', methods=['POST'])
+def delete_all():
+    deleted = 0
+    for f in os.listdir(SAVE_DIR):
+        if f.endswith('.json'):
+            os.remove(os.path.join(SAVE_DIR, f))
+            deleted += 1
+    return jsonify({"status": "success", "deleted": deleted})
+
+@app.route('/api/generate-dual', methods=['POST'])
+def generate_dual():
+    kw = request.get_json().get('keyword', '')
+    today = get_today()
+
+    def get_bundle(mode_desc):
+        prompt = f"""
+        주제: '{kw}', 모드: {mode_desc}. 오늘: {today}.
+        {HUMAN_PROMPT}
+        JSON 형식으로만 응답:
+        {{
+            "blog": {{ "title": "훅 제목", "script": "블로그 본문 (최소 800자, [이미지 1: 설명] 3~4개 포함)" }},
+            "sns": {{ "shorts": "9컷 쇼츠 대본", "insta": "인스타 캡션 + 해시태그 10개" }}
+        }}
+        """
+        return call_gemini(prompt, use_json_mime=False)
+
+    hacker = get_bundle("츤데레 코치. 팩트 폭행. IT/게임 비유. 단정형 화법.")
+    healer = get_bundle("따뜻한 치유자. ASMR 톤. 감각적 묘사. 미니어처 공방 서사.")
+
+    if not hacker and not healer:
+        return jsonify({"status": "error", "message": "AI 생성 실패. 재시도 해주세요."})
+
+    # 자동 저장
     try:
-        filepath = os.path.join(SAVE_DIR, os.path.basename(filename))
-        if not os.path.exists(filepath):
-            return jsonify({"error": "파일 없음"}), 404
-        with open(filepath, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        title = data.get('title', '')
-        script = data.get('script', '')
-        persona = data.get('persona', '')
-        # 대본을 네이버 블로그 HTML로 변환
-        paragraphs = [p.strip() for p in script.split('\\n') if p.strip()]
-        if not paragraphs:
-            paragraphs = [p.strip() for p in script.split('\n') if p.strip()]
-        body_html = ''.join([f'<p style="font-size:16px; line-height:2.0; margin-bottom:20px;">{p}</p>' for p in paragraphs])
-        naver_html = f"""<div style="text-align:center; font-family:'Nanum Gothic',sans-serif; color:#333;">
-<h2 style="font-size:24px; font-weight:bold; margin-bottom:30px; line-height:1.6;">{title}</h2>
-<p style="color:#888; font-size:14px; margin-bottom:40px;">{persona}</p>
-{body_html}
-</div>"""
-        return jsonify({"naver_html": naver_html, "title": title})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/generate', methods=['POST'])
-def generate():
-    req = request.get_json()
-    keyword = req.get('keyword', '')
-    mode = req.get('mode', 'DOPAMINE')
-    series_mode = req.get('series_mode', False)
-
-    # 📚 이전 원고 중복 방지 / 시리즈 연결
-    prev_titles = get_previous_titles()
-    prev_section = ""
-    if prev_titles:
-        title_list = "\n".join([f"  - {t}" for t in prev_titles])
-        if series_mode:
-            prev_section = f"""
-    [시리즈 모드 ON]
-    아래는 이전에 생성한 콘텐츠 제목 목록이다. 이 글들의 **후속편/시리즈**로 작성하라.
-    - 이전 글과 자연스럽게 이어지는 스토리라인.
-    - 제목에 시리즈 넘버링 혹은 '후편', '그 후' 등 표시.
-    [이전 글 목록]
-{title_list}
-"""
-        else:
-            prev_section = f"""
-    [중복 방지]
-    아래 제목들과 **완전히 다른 각도/관점/소재**로 작성하라. 같은 내용 반복 금지.
-    [이전 글 목록]
-{title_list}
-"""
-
-    if mode == 'DOPAMINE':
-        mode_instruction = "[DOPAMINE 모드: 뇌과학 해커 & 팩트 폭행]\n- 츤데레 코치 빙의. 단정형 화법.\n- IT/게임 비유, 조선왕조실록 인용으로 권위 세우기.\n- 비주얼: 하이퍼리얼리티 또는 다크 다큐멘터리."
-    else:
-        mode_instruction = "[OXYTOCIN 모드: 클레이 ASMR 힐링]\n- 지친 마음을 다독이는 따뜻한 치유자.\n- 평화로운 미니어처 공방 서사.\n- 비주얼: 폴리머 클레이, 쫀득한 질감, 텅스텐 조명."
-
-    master_prompt = f"""
-    당신은 콘텐츠 디렉터입니다. 주제 키워드: '{keyword}'
-    
-    {mode_instruction}
-    {prev_section}
-    {HUMANIZER_PROTOCOL}
-    {VISUAL_GUARDRAIL}
-
-    아래의 JSON 형식으로만 정확히 출력하세요. (마크다운 백틱 금지, 순수 JSON만)
-    {{
-        "title": "클릭을 유도하는 훅 제목",
-        "persona": "구체적인 타겟 페르소나",
-        "script": "구어체 대본 (최소 800자 이상)",
-        "prompts": [
-            {{"cut": "1", "text": "대사", "img": "이미지 프롬프트 (영어)", "vid": "비디오 프롬프트 (영어)"}}
-        ]
-    }}
-    """
-
-    content = None
-    for m_id in MODELS:
-        try:
-            res = client.models.generate_content(
-                model=m_id, 
-                contents=master_prompt,
-                config=types.GenerateContentConfig(temperature=0.8)
-            )
-            clean_text = clean_json_response(res.text)
-            content = json.loads(clean_text)
-            break
-        except Exception as e:
-            print(f"[{m_id}] Error: {e}")
-            continue
-
-    if not content:
-        return jsonify({"status": "error", "message": "AI 생성 중 오류가 발생했습니다. 다시 시도해주세요."})
-
-    try:
-        safe_kw = re.sub(r'\W+', '_', keyword)[:15]
-        timestamp = datetime.now().strftime("%y%m%d_%H%M%S")
-        filename = f"{safe_kw}_{timestamp}.json"
-        
-        filepath = os.path.join(SAVE_DIR, filename)
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(content, f, ensure_ascii=False, indent=4)
+        safe_kw = re.sub(r'\W+', '_', kw)[:15]
+        filename = f"{datetime.now().strftime('%y%m%d_%H%M%S')}_{safe_kw}.json"
+        save_data = {"keyword": kw, "hacker": hacker, "healer": healer}
+        with open(os.path.join(SAVE_DIR, filename), 'w', encoding='utf-8') as f:
+            json.dump(save_data, f, ensure_ascii=False, indent=4)
         print(f"[SAVED] {filename}")
-            
-        return jsonify({"status": "success", "data": content})
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)})
+        print(f"[SAVE ERROR] {e}")
+
+    return jsonify({"hacker": hacker, "healer": healer})
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
