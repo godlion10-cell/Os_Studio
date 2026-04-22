@@ -10,10 +10,12 @@ const factoryMap = {
     btnCSS: ["button[aria-label*='Generate']","button[aria-label*='Create']","button[data-testid*='generate']","button[type='submit']"]
   },
   "lumalabs.ai": {
-    name: "Luma Video", promptId: "prompt-video",
+    name: "Luma 영상 공장", promptId: "prompt-video",
     url: "https://lumalabs.ai/dream-machine",
-    inputCSS: ["textarea[placeholder*='Type a prompt']","textarea[placeholder*='Describe']","textarea","[contenteditable='true']"],
-    btnCSS: ["button[aria-label='Generate']","button[aria-label*='Create']","button[type='submit']"]
+    // 사장님이 완벽하게 찾아낸 입력창 과녁!
+    inputCSS: ["textarea[placeholder*='Describe what you want']"],
+    // 💡 버튼 과녁은 이제 몰라도 됩니다! 그냥 냅두세요. 알아서 엔터 칩니다.
+    btnCSS: []
   },
   "suno.com": {
     name: "Suno Music", promptId: "prompt-audio",

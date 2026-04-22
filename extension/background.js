@@ -13,10 +13,12 @@ const FACTORY_MAP = {
   },
   video: {
     url: 'https://lumalabs.ai/dream-machine',
-    name: 'Luma Video',
+    name: 'Luma 영상 공장',
     selectors: {
-      input: ["textarea[placeholder*='Type a prompt']","textarea[placeholder*='Describe']","div[contenteditable='true']","textarea"],
-      submit: ["button[aria-label='Generate']","button[aria-label*='Create']","button[type='submit']"],
+      // 사장님이 완벽하게 찾아낸 입력창 과녁!
+      input: ["textarea[placeholder*='Describe what you want']"],
+      // 💡 버튼 과녁은 이제 몰라도 됩니다! 그냥 냅두세요. 알아서 엔터 칩니다.
+      submit: [],
       keywords: ["generate","create"]
     },
     cooldown: 60000
